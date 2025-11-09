@@ -1,0 +1,118 @@
+name: Policy change / Source update
+description: Official source changed or conflicts detected. Capture diffs and propose a patch.
+title: "[Policy] <source name> — <summary of change>"
+labels:
+  - policy-change
+  - needs-source
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Purpose
+        Use this when Boston.gov or other official sources change. Link evidence, record diffs, and propose the graph/UX patch.
+  - type: input
+    id: source_url
+    attributes:
+      label: Primary source URL
+      description: Official page or PDF that changed.
+      placeholder: "https://www.boston.gov/departments/parking-clerk/how-get-resident-parking-permit"
+    validations:
+      required: true
+  - type: textarea
+    id: additional_sources
+    attributes:
+      label: Additional sources (optional)
+      description: Other official pages/PDFs relevant to the change.
+      placeholder: |
+        - https://www.boston.gov/departments/parking-clerk/resident-parking-permits
+        - https://www.boston.gov/sites/.../TrafficRules-2025-03-01.pdf
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence (quotes, screenshots, page refs)
+      description: Provide quotes/sections (≤25 words each) or page numbers where the change is visible.
+      placeholder: |
+        "Proof of Boston residency (dated within 30 days)..."
+        PDF p. 27: "Rental permit valid up to 30 days"
+    validations:
+      required: true
+  - type: textarea
+    id: old_facts
+    attributes:
+      label: Old facts (what our graph/UX currently says)
+      description: List IDs/text currently in the Facts Registry or UI.
+      placeholder: |
+        - rpp.proof_of_residency.count: "Two proofs required" (WRONG)
+  - type: textarea
+    id: new_facts
+    attributes:
+      label: New facts (what the source now says)
+      description: For each fact, include {text, source_section?, last_verified, confidence}.
+      placeholder: |
+        - rpp.proof_of_residency.count: "Exactly one proof of residency (≤30 days)."
+          last_verified: "2025-11-09"
+          confidence: "high"
+    validations:
+      required: true
+  - type: dropdown
+    id: impact
+    attributes:
+      label: Impact
+      options:
+        - critical (breaks eligibility or core logic)
+        - moderate (copy/UX adjustments)
+        - minor (typos/links)
+    validations:
+      required: true
+  - type: textarea
+    id: affected_areas
+    attributes:
+      label: Affected graph nodes/edges & code
+      description: List nodes/edges and files that must change.
+      placeholder: |
+        - Nodes: Requirement[rpp.proof_of_residency], Rule[RPP-15-5D]
+        - Files: backend/src/services/rpp_validator.py, docs/PRD.md
+  - type: textarea
+    id: patch_plan
+    attributes:
+      label: Proposed patch steps
+      description: Step-by-step changes to bring graph/UX in sync with the source.
+      placeholder: |
+        1. Update Facts Registry entries with citations
+        2. Adjust validators/tests
+        3. Update UI copy binding
+        4. Announce change in CHANGELOG
+    validations:
+      required: true
+  - type: input
+    id: last_verified
+    attributes:
+      label: last_verified (YYYY-MM-DD)
+      description: Date you verified the source.
+      placeholder: "2025-11-09"
+    validations:
+      required: true
+  - type: dropdown
+    id: confidence
+    attributes:
+      label: confidence
+      options:
+        - high
+        - medium
+        - low
+    validations:
+      required: true
+  - type: checkboxes
+    id: acceptance
+    attributes:
+      label: Acceptance checklist
+      options:
+        - label: Updated facts include {source_url, section?, last_verified, confidence}.
+          required: true
+        - label: Tests updated and passing; no contradictions in graph.
+          required: true
+        - label: Links validated (no 404s); screenshots added if helpful.
+          required: true
+        - label: PR describes impact and references this issue.
+          required: true

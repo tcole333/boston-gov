@@ -1,0 +1,104 @@
+name: Agent task
+description: Plan-first change with tests and citations; stateless (status lives in GitHub Issues/Projects).
+title: "[Agent] <short title>"
+labels:
+  - agent-task
+  - next-up
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Purpose
+        Use this when asking an agent to implement a change. Keep state in GitHub (not CLAUDE.md). Plan → approve → execute one step.
+  - type: input
+    id: goal
+    attributes:
+      label: Goal
+      description: One-sentence goal for this task.
+      placeholder: e.g., "Add validator for Boston RPP proof-of-residency recency (≤30 days)."
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context & Links
+      description: Link related Issues/PRs and summarize relevant decisions.
+      placeholder: "Related: #123, #456. Decision in #321."
+    validations:
+      required: true
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope (choose all that apply)
+      multiple: true
+      options:
+        - backend
+        - frontend
+        - graph
+        - docs
+        - devops
+  - type: checkboxes
+    id: reg_impact
+    attributes:
+      label: Regulatory impact
+      description: Does this change touch regulatory facts or requirements?
+      options:
+        - label: Touches regulatory facts (requires /qcite verification)
+        - label: No regulatory impact
+    validations:
+      required: true
+  - type: textarea
+    id: reg_facts
+    attributes:
+      label: Regulatory facts to add/change (if applicable)
+      description: >
+        For each fact changed, provide JSON-like items with required fields
+        {id?, text, source_url, source_section?, last_verified (YYYY-MM-DD), confidence (high|medium|low)}.
+      placeholder: |
+        - id: rpp.proof_of_residency.count
+          text: "Exactly one proof of residency required; ≤30 days old."
+          source_url: "https://www.boston.gov/departments/parking-clerk/how-get-resident-parking-permit"
+          source_section: "Proof of Boston residency"
+          last_verified: "2025-11-09"
+          confidence: "high"
+  - type: textarea
+    id: plan
+    attributes:
+      label: Minimal plan (3–5 bullets)
+      description: Plan → get approval → execute one step.
+      placeholder: |
+        - Update validator schema and fixtures
+        - Add server-side check with error copy
+        - Update PRD copy bindings to Facts Registry
+        - Tests: unit + integration
+    validations:
+      required: true
+  - type: textarea
+    id: test_plan
+    attributes:
+      label: Test plan
+      description: Enumerate unit/integration/UI tests you will add or update.
+      placeholder: |
+        - backend/tests/test_rpp_docs.py::test_recency_30_days
+        - frontend/tests/document-upload.spec.ts::rejects_old_docs
+    validations:
+      required: true
+  - type: checkboxes
+    id: acceptance
+    attributes:
+      label: Acceptance criteria (check all before merge)
+      options:
+        - label: All new/changed regulatory facts include {source_url, section?, last_verified, confidence}.
+          required: true
+        - label: Lint, types, and tests pass in CI.
+          required: true
+        - label: PR description includes CLAUDE.md commit SHA and command versions used.
+          required: true
+        - label: User-facing copy references the Facts Registry (no hard-coded policy strings).
+          required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes / Risks
+      description: Known risks, roll-back plan, or open questions.

@@ -1,0 +1,223 @@
+# Boston Resident Parking Permit (RPP) - Regulatory Facts Registry
+# All facts in this file are sourced from official Boston.gov pages and PDFs
+# Format: Each fact includes id, text, source_url, source_section (optional), last_verified, and confidence
+
+version: "1.0.0"
+last_updated: "2025-11-09"
+scope: "boston_resident_parking_permit"
+
+facts:
+  # Core eligibility requirements
+  - id: "rpp.eligibility.vehicle_class"
+    text: "Eligible vehicles are passenger vehicles or commercial vehicles under 1 ton"
+    source_url: "https://www.boston.gov/departments/parking-clerk/how-get-resident-parking-permit"
+    source_section: "Vehicle eligibility"
+    last_verified: "2025-11-09"
+    confidence: "high"
+
+  - id: "rpp.eligibility.registration_state"
+    text: "Vehicle must have valid Massachusetts registration in applicant's name at the Boston address, with principal garaging and insurance at that address"
+    source_url: "https://www.boston.gov/sites/default/files/file/2025/01/City%20of%20Boston%20Traffic%20Rules%20and%20Regulations%203.1.2025.pdf"
+    source_section: "Section 15, Rule 15-4A"
+    last_verified: "2025-11-09"
+    confidence: "high"
+
+  - id: "rpp.eligibility.no_unpaid_tickets"
+    text: "No unpaid Boston parking tickets on the registration"
+    source_url: "https://www.boston.gov/departments/parking-clerk/how-get-resident-parking-permit"
+    source_section: "Eligibility requirements"
+    last_verified: "2025-11-09"
+    confidence: "high"
+
+  # Proof of residency requirements
+  - id: "rpp.proof_of_residency.count"
+    text: "Exactly one proof of residency required"
+    source_url: "https://www.boston.gov/departments/parking-clerk/how-get-resident-parking-permit"
+    source_section: "Proof of Boston residency"
+    last_verified: "2025-11-09"
+    confidence: "high"
+
+  - id: "rpp.proof_of_residency.recency"
+    text: "Proof of residency must be dated within 30 days"
+    source_url: "https://www.boston.gov/departments/parking-clerk/how-get-resident-parking-permit"
+    source_section: "Proof of Boston residency"
+    last_verified: "2025-11-09"
+    confidence: "high"
+
+  - id: "rpp.proof_of_residency.name_match"
+    text: "Name on proof of residency must match the registration"
+    source_url: "https://www.boston.gov/departments/parking-clerk/how-get-resident-parking-permit"
+    source_section: "Proof of Boston residency"
+    last_verified: "2025-11-09"
+    confidence: "high"
+
+  - id: "rpp.proof_of_residency.accepted_types"
+    text: "Accepted proofs include utility bill (gas/electric/telephone), cable bill, bank statement, mortgage statement, credit card statement, water/sewer bill, or lease agreement"
+    source_url: "https://www.boston.gov/departments/parking-clerk/how-get-resident-parking-permit"
+    source_section: "Proof of Boston residency"
+    last_verified: "2025-11-09"
+    confidence: "high"
+
+  # Lease-specific requirements
+  - id: "rpp.proof_of_residency.lease_move_in_recency"
+    text: "For lease agreements, move-in date must be within 30 days"
+    source_url: "https://www.boston.gov/departments/parking-clerk/how-get-resident-parking-permit"
+    source_section: "Proof of Boston residency - lease requirements"
+    last_verified: "2025-11-09"
+    confidence: "high"
+
+  - id: "rpp.proof_of_residency.lease_online_window"
+    text: "For online applications with lease, must apply within 10 days of move-in"
+    source_url: "https://www.boston.gov/departments/parking-clerk/how-get-resident-parking-permit"
+    source_section: "Proof of Boston residency - lease requirements"
+    last_verified: "2025-11-09"
+    confidence: "high"
+
+  # Permit cost and issuance
+  - id: "rpp.permit.cost"
+    text: "Resident parking permits are free"
+    source_url: "https://www.boston.gov/departments/parking-clerk/resident-parking-permits"
+    source_section: "Permit details"
+    last_verified: "2025-11-09"
+    confidence: "high"
+
+  - id: "rpp.permit.in_person_timing"
+    text: "In-person applications at City Hall result in same-day permit issuance"
+    source_url: "https://www.boston.gov/departments/parking-clerk/how-get-resident-parking-permit"
+    source_section: "Application process"
+    last_verified: "2025-11-09"
+    confidence: "high"
+
+  - id: "rpp.permit.mail_timing"
+    text: "Permits submitted by mail typically arrive in 5-10 business days"
+    source_url: "https://www.boston.gov/departments/parking-clerk/how-get-resident-parking-permit"
+    source_section: "Application process"
+    last_verified: "2025-11-09"
+    confidence: "medium"
+    note: "Timing is typical/observed, not guaranteed"
+
+  # Sticker placement
+  - id: "rpp.permit.sticker_placement"
+    text: "Sticker must be placed on rear passenger-side window (or front passenger window if needed)"
+    source_url: "https://www.boston.gov/sites/default/files/file/2025/01/City%20of%20Boston%20Traffic%20Rules%20and%20Regulations%203.1.2025.pdf"
+    source_section: "Section 15, Display Rule"
+    last_verified: "2025-11-09"
+    confidence: "high"
+
+  # Rental car permits
+  - id: "rpp.rental.max_duration"
+    text: "Rental car permits are valid for up to 30 days maximum"
+    source_url: "https://www.boston.gov/sites/default/files/file/2025/01/City%20of%20Boston%20Traffic%20Rules%20and%20Regulations%203.1.2025.pdf"
+    source_section: "Section 15, Rule 15-5D"
+    last_verified: "2025-11-09"
+    confidence: "high"
+
+  - id: "rpp.rental.weekend_limitation"
+    text: "Weekend online submission not available for rental car permits"
+    source_url: "https://www.boston.gov/departments/parking-clerk/how-get-resident-parking-permit"
+    source_section: "Rental car permits"
+    last_verified: "2025-11-09"
+    confidence: "high"
+
+  - id: "rpp.rental.pickup_after_3pm"
+    text: "If rental car picked up after 3 PM, must apply next business day"
+    source_url: "https://www.boston.gov/departments/parking-clerk/how-get-resident-parking-permit"
+    source_section: "Rental car permits"
+    last_verified: "2025-11-09"
+    confidence: "high"
+
+  # Leased/corporate vehicle permits
+  - id: "rpp.leased_corporate.one_per_person"
+    text: "One permit per person for leased or corporate vehicles"
+    source_url: "https://www.boston.gov/sites/default/files/file/2025/01/City%20of%20Boston%20Traffic%20Rules%20and%20Regulations%203.1.2025.pdf"
+    source_section: "Section 15, Rule 15-11D"
+    last_verified: "2025-11-09"
+    confidence: "high"
+
+  - id: "rpp.leased_corporate.registration_requirement"
+    text: "MA registration must be in leasing company or corporation name, plus resident proof of address"
+    source_url: "https://www.boston.gov/sites/default/files/file/2025/06/Corporate%20Veh%20RPP%20Applicants.pdf"
+    source_section: "Corporate vehicle requirements"
+    last_verified: "2025-11-09"
+    confidence: "high"
+
+  # Business vehicle permits
+  - id: "rpp.business.one_per_business"
+    text: "One permit per business for business vehicles"
+    source_url: "https://www.boston.gov/sites/default/files/file/2025/01/City%20of%20Boston%20Traffic%20Rules%20and%20Regulations%203.1.2025.pdf"
+    source_section: "Section 15, Rule 15-10D"
+    last_verified: "2025-11-09"
+    confidence: "high"
+
+  - id: "rpp.business.documentation"
+    text: "Business vehicles require MA registration in business name at neighborhood address, plus Articles of Organization or City Business Certificate"
+    source_url: "https://www.boston.gov/departments/parking-clerk/how-get-resident-parking-permit"
+    source_section: "Business vehicle permits"
+    last_verified: "2025-11-09"
+    confidence: "high"
+
+  # Military exception
+  - id: "rpp.military.registration_exception"
+    text: "Active-duty military may use current non-MA registration with MA orders"
+    source_url: "https://www.boston.gov/sites/default/files/file/2025/06/Miltary%20Personnel%20RPP.pdf"
+    source_section: "Military personnel requirements"
+    last_verified: "2025-11-09"
+    confidence: "high"
+
+  # Enforcement and violations
+  - id: "rpp.enforcement.no_visitor_permits"
+    text: "No visitor permits exist; visitor spaces are 2-hour or 2-hour except resident sticker where posted"
+    source_url: "https://www.boston.gov/departments/parking-clerk/resident-parking-permits"
+    source_section: "Program details"
+    last_verified: "2025-11-09"
+    confidence: "high"
+
+  - id: "rpp.enforcement.violation_fine"
+    text: "Parking in RPP zone without valid neighborhood sticker results in $100 base fine"
+    source_url: "https://www.boston.gov/departments/parking-clerk/how-get-resident-parking-permit"
+    source_section: "Enforcement"
+    last_verified: "2025-11-09"
+    confidence: "high"
+
+  - id: "rpp.enforcement.revocation"
+    text: "Sticker misuse, duplication, or bounced ticket payments result in revocation and up to 2-year denial"
+    source_url: "https://www.boston.gov/sites/default/files/file/2025/01/City%20of%20Boston%20Traffic%20Rules%20and%20Regulations%203.1.2025.pdf"
+    source_section: "Section 15, Revocation Rule"
+    last_verified: "2025-11-09"
+    confidence: "high"
+
+  - id: "rpp.enforcement.address_change_obligation"
+    text: "Address changes must be reported to Parking Clerk; failure can trigger revocation"
+    source_url: "https://www.boston.gov/departments/parking-clerk/how-get-resident-parking-permit"
+    source_section: "Compliance requirements"
+    last_verified: "2025-11-09"
+    confidence: "high"
+
+  # Office information
+  - id: "rpp.office.location"
+    text: "Office of the Parking Clerk is located at 1 City Hall Square, Room 224, Boston MA 02201"
+    source_url: "https://www.boston.gov/departments/parking-clerk"
+    source_section: "Contact information"
+    last_verified: "2025-11-09"
+    confidence: "high"
+
+  - id: "rpp.office.hours"
+    text: "Office hours are Monday-Friday, 9:00 AM - 4:30 PM"
+    source_url: "https://www.boston.gov/departments/parking-clerk"
+    source_section: "Contact information"
+    last_verified: "2025-11-09"
+    confidence: "high"
+
+  - id: "rpp.office.phone"
+    text: "Phone: 617-635-4410"
+    source_url: "https://www.boston.gov/departments/parking-clerk"
+    source_section: "Contact information"
+    last_verified: "2025-11-09"
+    confidence: "high"
+
+  - id: "rpp.office.email"
+    text: "Email: parking@boston.gov"
+    source_url: "https://www.boston.gov/departments/parking-clerk"
+    source_section: "Contact information"
+    last_verified: "2025-11-09"
+    confidence: "high"

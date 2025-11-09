@@ -1,0 +1,78 @@
+repos:
+  # Python: Ruff for linting and formatting
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      # Run the linter
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+        types_or: [python, pyi]
+      # Run the formatter
+      - id: ruff-format
+        types_or: [python, pyi]
+
+  # Python: mypy for type checking
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.13.0
+    hooks:
+      - id: mypy
+        args: [--strict, --ignore-missing-imports]
+        additional_dependencies:
+          - types-redis
+          - types-requests
+          - pydantic
+        files: ^backend/src/
+        exclude: ^backend/tests/
+
+  # JavaScript/TypeScript: Prettier for formatting
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v4.0.0-alpha.8
+    hooks:
+      - id: prettier
+        types_or: [javascript, jsx, ts, tsx, json, css, scss, yaml, markdown]
+        args: [--write]
+        files: ^frontend/
+
+  # JavaScript/TypeScript: ESLint for linting
+  - repo: https://github.com/pre-commit/mirrors-eslint
+    rev: v9.14.0
+    hooks:
+      - id: eslint
+        files: ^frontend/src/.*\.[jt]sx?$
+        types: [file]
+        args: [--fix, --max-warnings=0]
+        additional_dependencies:
+          - eslint@^8.57.0
+          - eslint-plugin-react@^7.33.2
+          - eslint-plugin-react-hooks@^4.6.0
+          - '@typescript-eslint/eslint-plugin@^6.21.0'
+          - '@typescript-eslint/parser@^6.21.0'
+
+  # General: trailing whitespace and end-of-file fixes
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^(.*\.md|.*\.txt)$
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--safe]
+      - id: check-json
+      - id: check-added-large-files
+        args: [--maxkb=1000]
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: detect-private-key
+
+  # Security: detect secrets
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+        exclude: package-lock.json
+
+# Configuration
+default_install_hook_types: [pre-commit, commit-msg]
+default_stages: [commit]
+fail_fast: false
