@@ -23,7 +23,7 @@ This project uses LLM agents to parse government regulations, build process grap
 ### Backend
 - **Python 3.11+** with **FastAPI** for REST API
 - **Neo4j** for regulatory process graph database
-- **Pinecone** or **pgvector** for vector embeddings and semantic search
+- **PostgreSQL + pgvector** for vector embeddings and semantic search
 - **LangGraph** for multi-step agent orchestration
 - **Celery + Redis** for async document processing
 - **pytest** for testing
@@ -201,6 +201,53 @@ boston-gov/
 ├── CHANGELOG.md          # Version history
 └── docker-compose.yml    # Docker services configuration
 ```
+
+## Custom Agents & Hooks
+
+### Custom Agents
+
+This project uses specialized AI agents for different development roles. Invoke agents in conversations with `@agent-name`.
+
+#### Core Agents
+- **`@product-owner`** - Strategic planning, epic/issue management, PRD alignment, regulatory drift handling
+- **`@developer`** - Feature implementation, 7-phase workflow, UV package management, citation-first coding
+- **`@regulatory-research`** - Parse regulations, extract facts, maintain Facts Registry, citation verification
+
+#### Quality Agents
+- **`@testing`** - Unit/integration tests, AAA pattern, avoiding reward hacking, coverage ≥80%
+- **`@qa`** - Smoke tests, RBAC validation, API fuzzing, security scanning, performance checks
+- **`@e2e-testing`** - Playwright browser automation, user journey validation, WCAG compliance
+
+#### Specialized Agents
+- **`@graph-modeling`** - Neo4j schema design, Cypher optimization, data integrity, constraints
+- **`@citation-validation`** - Verify citations in PRs, validate URLs, check freshness, confidence scoring
+- **`@devops`** - Docker Compose, CI/CD with GitHub Actions, secrets management
+- **`@ui-designer`** - Government design tokens, WCAG 2.2 AA, USWDS patterns, component design
+- **`@copywriting`** - Government-appropriate tone, error messages, plain language, accessibility
+
+**Example Usage:**
+```bash
+@product-owner create an epic for Phase 1 Boston RPP implementation
+@developer implement the proof-of-residency validator with citations
+@regulatory-research parse the latest RPP requirements from boston.gov
+@graph-modeling design the Process→Step→Requirement schema
+```
+
+### Automated Hooks
+
+Project quality is enforced through automated hooks that run during development:
+
+#### P0 Hooks (Critical - Block Operations)
+- **`secrets-guard`** - Prevents committing .env files, API keys, credentials
+- **`doc-hygiene`** - Enforces stateless documentation (blocks "TODO", "WIP", status in CLAUDE.md)
+- **`citation-verification`** - Ensures all regulatory facts have source_url, last_verified, confidence
+
+#### P1 Hooks (High Priority)
+- **`quality-gate`** - Runs ruff, mypy, eslint, tsc on modified files (Stop event)
+- **`regulatory-context`** - Injects citation reminder when discussing regulations
+- **`test-coverage`** - Warns about missing tests for modified source files
+
+All hooks are configured in `.claude/settings.json` and scripts in `.claude/hooks/`.
 
 ## Development Workflow
 

@@ -1,0 +1,108 @@
+#!/bin/bash
+# quality-gate - P1 High Priority
+# Runs linting, formatting, and type checks on modified files
+
+set -euo pipefail
+export LC_ALL=C
+
+# Parse hook input (JSON on stdin)
+INPUT=$(cat)
+
+# Get project root
+PROJECT_ROOT="/Users/travcole/projects/boston-gov"
+
+# Track if any checks failed
+FAILED_CHECKS=()
+
+# Check for modified Python files
+PYTHON_FILES=$(find "$PROJECT_ROOT/backend/src" -name "*.py" -newer "$PROJECT_ROOT/.git/index" 2>/dev/null || echo "")
+
+if [ -n "$PYTHON_FILES" ]; then
+  cd "$PROJECT_ROOT/backend"
+
+  # Check if venv exists
+  if [ ! -d "venv" ]; then
+    cat <<EOF
+{
+  "allowed": false,
+  "message": "⚠️  Python virtual environment not found\n\n✅ Setup required:\n  cd backend\n  python -m venv venv\n  source venv/bin/activate\n  pip install -r requirements.txt"
+}
+EOF
+    exit 0
+  fi
+
+  # Activate venv
+  source venv/bin/activate 2>/dev/null || true
+
+  # Run ruff format check
+  if command -v ruff &> /dev/null; then
+    if ! ruff format --check src/ 2>&1; then
+      FAILED_CHECKS+=("ruff format: Python files need formatting")
+    fi
+
+    # Run ruff lint
+    if ! ruff check src/ 2>&1; then
+      FAILED_CHECKS+=("ruff check: Linting issues found")
+    fi
+  fi
+
+  # Run mypy
+  if command -v mypy &> /dev/null; then
+    if ! mypy src/ 2>&1; then
+      FAILED_CHECKS+=("mypy: Type checking errors found")
+    fi
+  fi
+fi
+
+# Check for modified TypeScript/JavaScript files
+TS_FILES=$(find "$PROJECT_ROOT/frontend/src" \( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" \) -newer "$PROJECT_ROOT/.git/index" 2>/dev/null || echo "")
+
+if [ -n "$TS_FILES" ]; then
+  cd "$PROJECT_ROOT/frontend"
+
+  # Check if node_modules exists
+  if [ ! -d "node_modules" ]; then
+    cat <<EOF
+{
+  "allowed": false,
+  "message": "⚠️  Node modules not found\n\n✅ Setup required:\n  cd frontend\n  npm install"
+}
+EOF
+    exit 0
+  fi
+
+  # Run npm lint
+  if [ -f "package.json" ] && grep -q '"lint"' package.json; then
+    if ! npm run lint 2>&1; then
+      FAILED_CHECKS+=("npm run lint: ESLint issues found")
+    fi
+  fi
+
+  # Run type check
+  if [ -f "package.json" ] && grep -q '"type-check"' package.json; then
+    if ! npm run type-check 2>&1; then
+      FAILED_CHECKS+=("npm run type-check: TypeScript errors found")
+    fi
+  fi
+fi
+
+# Block if any checks failed
+if [ ${#FAILED_CHECKS[@]} -gt 0 ]; then
+  FAILED_LIST=$(printf '  ❌ %s\n' "${FAILED_CHECKS[@]}")
+
+  cat <<EOF
+{
+  "allowed": false,
+  "message": "🚨 QUALITY GATE FAILED\n\n$FAILED_LIST\n\n✅ Fix with:\n\nPython:\n  cd backend\n  source venv/bin/activate\n  ruff format src/\n  ruff check src/ --fix\n  mypy src/\n\nTypeScript:\n  cd frontend\n  npm run lint -- --fix\n  npm run type-check\n\n📖 See CLAUDE.md for code style requirements."
+}
+EOF
+  exit 0
+fi
+
+# Allow if all checks passed
+cat <<EOF
+{
+  "allowed": true,
+  "message": "✅ Quality checks passed"
+}
+EOF

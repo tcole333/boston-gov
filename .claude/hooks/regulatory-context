@@ -1,0 +1,53 @@
+#!/bin/bash
+# regulatory-context - P1 Medium Priority
+# Injects citation reminder when prompt mentions regulatory content
+
+set -euo pipefail
+export LC_ALL=C
+
+# Parse hook input (JSON on stdin)
+INPUT=$(cat)
+
+# Extract prompt text
+PROMPT=$(echo "$INPUT" | grep -o '"prompt":"[^"]*"' | cut -d'"' -f4 || echo "")
+
+# Keywords that indicate regulatory content
+REGULATORY_KEYWORDS=(
+  "regulation"
+  "permit"
+  "requirement"
+  "government"
+  "process"
+  "documentation"
+  "eligibility"
+  "policy"
+  "law"
+  "rule"
+  "ordinance"
+  "statute"
+  "compliance"
+)
+
+# Check if prompt contains regulatory keywords (case-insensitive)
+CONTAINS_REGULATORY=false
+for keyword in "${REGULATORY_KEYWORDS[@]}"; do
+  if echo "$PROMPT" | grep -qi "$keyword"; then
+    CONTAINS_REGULATORY=true
+    break
+  fi
+done
+
+# If regulatory content detected, inject citation reminder
+if [ "$CONTAINS_REGULATORY" = true ]; then
+  cat <<EOF
+{
+  "additionalContext": "📖 CITATION REMINDER: When working with regulatory information, all facts must include:\n\n{\n  \"source_url\": \"https://www.boston.gov/...\",\n  \"source_section\": \"Section name or heading\",\n  \"last_verified\": \"2025-11-09\",\n  \"confidence\": \"high\"  // or medium, low\n}\n\nDo not persist chain-of-thought. Store only verifiable facts with sources.\nSee docs/architecture.md for complete citation requirements."
+}
+EOF
+else
+  cat <<EOF
+{
+  "additionalContext": null
+}
+EOF
+fi

@@ -1,0 +1,128 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "hook": "hooks/doc-hygiene",
+        "description": "Block state/status language in stateless docs",
+        "priority": "P0",
+        "toolFilters": ["Edit", "Write"],
+        "metadata": {
+          "docs": [
+            "CLAUDE.md",
+            "docs/architecture.md",
+            "docs/PRD.md",
+            "docs/data_model.md",
+            "README.md"
+          ]
+        }
+      },
+      {
+        "hook": "hooks/secrets-guard",
+        "description": "Prevent commits of secrets and sensitive files",
+        "priority": "P0",
+        "toolFilters": ["Write", "Edit"],
+        "metadata": {
+          "protectedPatterns": [
+            ".env*",
+            "credentials.json",
+            "*.pem",
+            "*.key",
+            "*.cert",
+            "secrets.yaml",
+            "secrets.json"
+          ]
+        }
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hook": "hooks/citation-verification",
+        "description": "Verify regulatory facts have required citations",
+        "priority": "P0",
+        "toolFilters": ["Write", "Edit"],
+        "metadata": {
+          "requiredFields": [
+            "source_url",
+            "last_verified",
+            "confidence"
+          ],
+          "targetPath": "docs/facts/*.yaml"
+        }
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hook": "hooks/regulatory-context",
+        "description": "Inject citation reminder for regulatory content",
+        "priority": "P1",
+        "metadata": {
+          "keywords": [
+            "regulation",
+            "permit",
+            "requirement",
+            "government",
+            "process",
+            "documentation",
+            "eligibility",
+            "policy"
+          ]
+        }
+      }
+    ],
+    "Stop": [
+      {
+        "hook": "hooks/quality-gate",
+        "description": "Run linting, formatting, and type checks",
+        "priority": "P1",
+        "metadata": {
+          "pythonChecks": [
+            "ruff format --check",
+            "ruff check",
+            "mypy"
+          ],
+          "typescriptChecks": [
+            "npm run lint",
+            "npm run type-check"
+          ]
+        }
+      },
+      {
+        "hook": "hooks/test-coverage",
+        "description": "Warn about missing tests for modified files",
+        "priority": "P1",
+        "metadata": {
+          "warnOnly": true,
+          "targetCoverage": "80%"
+        }
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash",
+      "Edit",
+      "Write",
+      "Read",
+      "Glob",
+      "Grep",
+      "Bash(npm init:*)",
+      "Bash(npm install:*)",
+      "Bash(ls:*)",
+      "Bash(.secrets.baseline)",
+      "Bash(chmod:*)",
+      "Bash(npm run type-check:*)",
+      "Bash(npm run lint)",
+      "Bash(timeout 5 npm run dev:*)",
+      "Bash(npm run build:*)",
+      "Bash(LC_ALL=C sed:*)",
+      "Bash(git:*)",
+      "Bash(gh:*)",
+      "Bash(git push:*)",
+      "WebSearch",
+      "WebFetch(domain:code.claude.com)",
+      "WebFetch(domain:github.com)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

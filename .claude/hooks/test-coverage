@@ -1,0 +1,90 @@
+#!/bin/bash
+# test-coverage - P1 Medium Priority
+# Warns about missing tests for modified source files
+
+set -euo pipefail
+export LC_ALL=C
+
+# Parse hook input (JSON on stdin)
+INPUT=$(cat)
+
+# Get project root
+PROJECT_ROOT="/Users/travcole/projects/boston-gov"
+
+# Track files without tests
+MISSING_TESTS=()
+
+# Check for modified Python source files
+if [ -d "$PROJECT_ROOT/backend/src" ]; then
+  PYTHON_SRC_FILES=$(find "$PROJECT_ROOT/backend/src" -name "*.py" -type f 2>/dev/null || echo "")
+
+  for src_file in $PYTHON_SRC_FILES; do
+    # Skip __init__.py files
+    if [[ "$src_file" == *"__init__.py" ]]; then
+      continue
+    fi
+
+    # Determine expected test file path
+    RELATIVE_PATH="${src_file#$PROJECT_ROOT/backend/src/}"
+    BASENAME=$(basename "$src_file" .py)
+    DIRNAME=$(dirname "$RELATIVE_PATH")
+
+    if [ "$DIRNAME" = "." ]; then
+      TEST_FILE="$PROJECT_ROOT/backend/tests/test_${BASENAME}.py"
+    else
+      TEST_FILE="$PROJECT_ROOT/backend/tests/${DIRNAME}/test_${BASENAME}.py"
+    fi
+
+    # Check if test file exists
+    if [ ! -f "$TEST_FILE" ]; then
+      MISSING_TESTS+=("$src_file -> $TEST_FILE")
+    fi
+  done
+fi
+
+# Check for modified TypeScript/React source files
+if [ -d "$PROJECT_ROOT/frontend/src" ]; then
+  TS_SRC_FILES=$(find "$PROJECT_ROOT/frontend/src" \( -name "*.ts" -o -name "*.tsx" \) -type f 2>/dev/null || echo "")
+
+  for src_file in $TS_SRC_FILES; do
+    # Skip type definition files
+    if [[ "$src_file" == *".d.ts" ]]; then
+      continue
+    fi
+
+    # Determine expected test file path
+    BASENAME=$(basename "$src_file")
+    DIRNAME=$(dirname "$src_file")
+    NAME_ONLY="${BASENAME%.*}"
+    EXTENSION="${BASENAME##*.}"
+
+    # Common test file patterns
+    TEST_FILE_1="${DIRNAME}/${NAME_ONLY}.test.${EXTENSION}"
+    TEST_FILE_2="${DIRNAME}/${NAME_ONLY}.spec.${EXTENSION}"
+    TEST_FILE_3="$PROJECT_ROOT/frontend/tests/${NAME_ONLY}.test.${EXTENSION}"
+
+    # Check if any test file exists
+    if [ ! -f "$TEST_FILE_1" ] && [ ! -f "$TEST_FILE_2" ] && [ ! -f "$TEST_FILE_3" ]; then
+      MISSING_TESTS+=("$src_file -> ${DIRNAME}/${NAME_ONLY}.test.${EXTENSION}")
+    fi
+  done
+fi
+
+# Warn if tests are missing (don't block)
+if [ ${#MISSING_TESTS[@]} -gt 0 ]; then
+  MISSING_LIST=$(printf '  📝 %s\n' "${MISSING_TESTS[@]}")
+
+  cat <<EOF
+{
+  "allowed": true,
+  "message": "⚠️  WARNING: Source files without corresponding tests:\n\n$MISSING_LIST\n\n📖 Testing requirements from CLAUDE.md:\n  - Tests for agent logic and graph business rules\n  - Test DB ops with test DB or mocks\n  - Aim ≥ 80% coverage on core logic\n  - Include happy-path and error cases\n\n✅ Recommended:\n  Backend: pytest tests/\n  Frontend: npm test\n\nThis is a warning, not a blocker. Consider adding tests."
+}
+EOF
+else
+  cat <<EOF
+{
+  "allowed": true,
+  "message": "✅ All modified source files have corresponding tests"
+}
+EOF
+fi

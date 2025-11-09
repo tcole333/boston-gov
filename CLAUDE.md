@@ -29,6 +29,35 @@ These commands are defined in `/.claude/commands/`:
 - **`#qtest`** → List tests required by the diff; generate focused unit tests; note any missing fixtures.
 - **`#qcite`** → Verify all new/changed **regulatory** claims have citations + `last_verified`; add a checklist to the PR.
 
+## Custom Agents (specialized roles)
+Custom agents are defined in `/.claude/agents/`. Invoke with `@agent-name` in conversations.
+
+### Core Agents
+- **`@product-owner`** → Strategic planning, epic/issue management, PRD alignment, regulatory drift handling, citation enforcement
+- **`@developer`** → Feature implementation with 7-phase workflow (context → plan → implement → test → PR → iterate → review), UV package management, citation-first coding
+- **`@regulatory-research`** → Parse regulations, extract structured facts, maintain Facts Registry, citation verification, confidence scoring
+
+### Quality Agents
+- **`@testing`** → Unit/integration tests, avoiding "reward hacking", AAA pattern, parametrized tests, coverage reporting
+- **`@qa`** → Smoke tests, RBAC validation, API fuzzing, security scanning, performance checks, mutation testing
+- **`@e2e-testing`** → Playwright browser automation, user journey validation, critical flows, accessibility testing
+
+### Specialized Agents
+- **`@graph-modeling`** → Neo4j schema design, Cypher query optimization, data integrity, constraint management
+- **`@citation-validation`** → Verify citations in PRs, validate source URLs, check freshness, confidence calibration
+- **`@devops`** → Docker Compose, CI/CD with GitHub Actions, secrets management, environment parity
+- **`@ui-designer`** → Government-appropriate design tokens, WCAG 2.2 AA compliance, component design
+- **`@copywriting`** → Government tone (authoritative, clear, helpful), error messages, accessibility-focused copy
+
+### Usage Examples
+```
+@product-owner create an epic for Phase 1 Boston RPP implementation
+@developer implement the proof-of-residency validator with citations
+@regulatory-research parse the latest RPP requirements from boston.gov
+@graph-modeling design the Process→Step→Requirement schema
+@citation-validation verify all facts in docs/facts/boston_rpp.yaml
+```
+
 ---
 
 ## Project Overview (stable)

@@ -1,0 +1,78 @@
+#!/bin/bash
+# doc-hygiene - P0 Critical
+# Prevents state/status language in stateless documentation files
+
+set -euo pipefail
+export LC_ALL=C
+
+# Parse hook input (JSON on stdin)
+INPUT=$(cat)
+
+# Extract file path and content
+FILE_PATH=$(echo "$INPUT" | grep -o '"file_path":"[^"]*"' | head -1 | cut -d'"' -f4 || echo "")
+
+# Only check stateless documentation files
+STATELESS_DOCS=(
+  "CLAUDE.md"
+  "docs/architecture.md"
+  "docs/PRD.md"
+  "docs/data_model.md"
+  "README.md"
+)
+
+# Check if this is a stateless doc
+IS_STATELESS=false
+for doc in "${STATELESS_DOCS[@]}"; do
+  if [[ "$FILE_PATH" == *"$doc" ]]; then
+    IS_STATELESS=true
+    break
+  fi
+done
+
+# Skip if not a stateless doc
+if [ "$IS_STATELESS" = false ]; then
+  cat <<EOF
+{
+  "allowed": true
+}
+EOF
+  exit 0
+fi
+
+# State/status phrases to block (case-insensitive)
+STATE_PATTERNS=(
+  "in progress"
+  "TODO"
+  "FIXME"
+  "working on"
+  "currently"
+  "status:"
+  "WIP"
+  "ongoing"
+  "pending"
+  "next steps:"
+  "action items:"
+)
+
+# Check file content for state language
+if [ -f "$FILE_PATH" ]; then
+  for pattern in "${STATE_PATTERNS[@]}"; do
+    if grep -qi "$pattern" "$FILE_PATH" 2>/dev/null; then
+      BASENAME=$(basename "$FILE_PATH")
+      cat <<EOF
+{
+  "allowed": false,
+  "message": "🚨 BLOCKED: State/status language detected in '$BASENAME'\n\n⚠️  Found phrase: '$pattern'\n\n📖 From CLAUDE.md:\n   'This file is stateless. All plans, statuses, and work-in-progress\n   notes live in GitHub Issues/Projects.'\n\n✅ What to do:\n  1. Remove status/progress language from $BASENAME\n  2. Move state tracking to GitHub Issues with labels:\n     - 'plan', 'status', 'decision'\n  3. Keep this file as a durable operating manual only\n  4. Use Issues for: TODOs, current work, action items\n\n🔍 Blocked patterns: ${STATE_PATTERNS[*]}"
+}
+EOF
+      exit 0
+    fi
+  done
+fi
+
+# Allow if no state language detected
+cat <<EOF
+{
+  "allowed": true
+}
+EOF
