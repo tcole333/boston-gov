@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src import __version__
-from src.api.routes import facts, processes
+from src.api.routes import chat, facts, processes
 from src.db.graph.client import get_neo4j_client
 
 
@@ -54,6 +54,7 @@ app.add_middleware(
 )
 
 # Register API routes
+app.include_router(chat.router)
 app.include_router(processes.router)
 app.include_router(facts.router)
 app.include_router(facts.registries_router)
