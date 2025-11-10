@@ -4,6 +4,22 @@ import { apiClient, getApiErrorMessage } from '../lib/api'
 import type { ChatRequest, ConversationResponse, Citation } from '../types/api'
 
 /**
+ * Validates that a URL uses a safe protocol (http or https).
+ * Prevents XSS attacks via javascript:, data:, vbscript: protocols.
+ *
+ * @param url - The URL to validate
+ * @returns true if the URL is safe, false otherwise
+ */
+const isSafeUrl = (url: string): boolean => {
+  try {
+    const parsed = new URL(url)
+    return ['http:', 'https:'].includes(parsed.protocol)
+  } catch {
+    return false
+  }
+}
+
+/**
  * Message in the chat interface.
  * Extends the conversation with user messages and agent responses.
  */
@@ -32,9 +48,11 @@ interface CitationLinkProps {
  * Renders a citation as a clickable superscript link.
  */
 const CitationLink = ({ index, citation }: CitationLinkProps): JSX.Element => {
+  const safeUrl = isSafeUrl(citation.url) ? citation.url : '#'
+
   return (
     <a
-      href={citation.url}
+      href={safeUrl}
       target="_blank"
       rel="noopener noreferrer"
       style={{
@@ -47,6 +65,12 @@ const CitationLink = ({ index, citation }: CitationLinkProps): JSX.Element => {
       }}
       title={`${citation.text}${citation.source_section ? ` (${citation.source_section})` : ''}`}
       aria-label={`Citation ${index}: ${citation.text}`}
+      onClick={(e) => {
+        if (!isSafeUrl(citation.url)) {
+          e.preventDefault()
+          console.warn('Blocked unsafe URL:', citation.url)
+        }
+      }}
     >
       [{index}]
     </a>
@@ -81,21 +105,30 @@ const CitationList = ({ citations }: CitationListProps): JSX.Element => {
     >
       <div style={{ fontWeight: 'bold', marginBottom: '0.5rem' }}>Sources:</div>
       <ol style={{ margin: 0, paddingLeft: '1.5rem' }}>
-        {citations.map((citation, index) => (
-          <li key={index} style={{ marginBottom: '0.25rem' }}>
-            <a
-              href={citation.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ color: '#0066cc', textDecoration: 'none' }}
-            >
-              {citation.text}
-            </a>
-            {citation.source_section && (
-              <span style={{ color: '#777' }}> ({citation.source_section})</span>
-            )}
-          </li>
-        ))}
+        {citations.map((citation, index) => {
+          const safeUrl = isSafeUrl(citation.url) ? citation.url : '#'
+          return (
+            <li key={index} style={{ marginBottom: '0.25rem' }}>
+              <a
+                href={safeUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: '#0066cc', textDecoration: 'none' }}
+                onClick={(e) => {
+                  if (!isSafeUrl(citation.url)) {
+                    e.preventDefault()
+                    console.warn('Blocked unsafe URL:', citation.url)
+                  }
+                }}
+              >
+                {citation.text}
+              </a>
+              {citation.source_section && (
+                <span style={{ color: '#777' }}> ({citation.source_section})</span>
+              )}
+            </li>
+          )
+        })}
       </ol>
     </div>
   )
@@ -122,13 +155,29 @@ const MessageBubble = ({ message }: MessageBubbleProps): JSX.Element => {
     }
 
     // Replace citation markers like [1], [2] with clickable links
+    const MAX_CITATIONS = 100 // Prevent DoS from excessive citation markers
     const parts: (string | JSX.Element)[] = []
     let lastIndex = 0
+    let matchCount = 0
     const regex = /\[(\d+)\]/g
     let match: RegExpExecArray | null
 
     while ((match = regex.exec(message.content)) !== null) {
+      matchCount++
+      if (matchCount > MAX_CITATIONS) {
+        console.warn('Too many citation markers, stopping parsing')
+        break
+      }
+
       const citationIndex = parseInt(match[1] ?? '0', 10)
+
+      // Validate citation index is reasonable
+      if (citationIndex < 1 || citationIndex > 1000) {
+        parts.push(match[0] ?? '')
+        lastIndex = regex.lastIndex
+        continue
+      }
+
       const citation = message.citations[citationIndex - 1]
 
       // Add text before citation
@@ -281,7 +330,11 @@ export const ChatInterface = (): JSX.Element => {
     onError: (err: unknown) => {
       const errorMessage = getApiErrorMessage(err)
       setError(errorMessage)
-      console.error('Chat error:', err)
+
+      // Only log safe info in dev mode (prevent information disclosure)
+      if (import.meta.env.DEV) {
+        console.error('Chat error:', { message: errorMessage })
+      }
     },
   })
 
