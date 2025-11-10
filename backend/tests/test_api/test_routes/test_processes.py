@@ -4,8 +4,8 @@ These tests use FastAPI's dependency override system to mock GraphService
 interactions and verify that the API routes correctly handle success and error cases.
 """
 
+from collections.abc import Generator
 from datetime import date, datetime
-from typing import Generator
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -267,6 +267,17 @@ def test_get_process_steps_connection_error(client: TestClient, mock_service: Ma
     assert "Database connection error" in data["detail"]
 
 
+def test_get_process_steps_service_error(client: TestClient, mock_service: MagicMock) -> None:
+    """Test handling of general service error when getting steps."""
+    mock_service.get_process_steps = AsyncMock(side_effect=GraphServiceError("Query failed"))
+
+    response = client.get("/api/processes/boston_resident_parking_permit/steps")
+
+    assert response.status_code == 500
+    data = response.json()
+    assert "Error retrieving steps" in data["detail"]
+
+
 # ==================== GET /api/processes/{process_id}/steps/{step_id} ====================
 
 
@@ -289,9 +300,7 @@ def test_get_step_not_found(client: TestClient, mock_service: MagicMock) -> None
     """Test 404 response when step is not found."""
     mock_service.get_step_by_id = AsyncMock(return_value=None)
 
-    response = client.get(
-        "/api/processes/boston_resident_parking_permit/steps/nonexistent_step"
-    )
+    response = client.get("/api/processes/boston_resident_parking_permit/steps/nonexistent_step")
 
     assert response.status_code == 404
     data = response.json()
@@ -311,6 +320,19 @@ def test_get_step_connection_error(client: TestClient, mock_service: MagicMock) 
     assert response.status_code == 503
     data = response.json()
     assert "Database connection error" in data["detail"]
+
+
+def test_get_step_service_error(client: TestClient, mock_service: MagicMock) -> None:
+    """Test handling of general service error when getting a step."""
+    mock_service.get_step_by_id = AsyncMock(side_effect=GraphServiceError("Query failed"))
+
+    response = client.get(
+        "/api/processes/boston_resident_parking_permit/steps/rpp_step_1_check_eligibility"
+    )
+
+    assert response.status_code == 500
+    data = response.json()
+    assert "Error retrieving step" in data["detail"]
 
 
 # ==================== GET /api/processes/{process_id}/dag ====================
@@ -382,6 +404,17 @@ def test_get_process_dag_connection_error(client: TestClient, mock_service: Magi
     assert "Database connection error" in data["detail"]
 
 
+def test_get_process_dag_service_error(client: TestClient, mock_service: MagicMock) -> None:
+    """Test handling of general service error when getting DAG."""
+    mock_service.get_process_dag = AsyncMock(side_effect=GraphServiceError("Query failed"))
+
+    response = client.get("/api/processes/boston_resident_parking_permit/dag")
+
+    assert response.status_code == 500
+    data = response.json()
+    assert "Error retrieving DAG" in data["detail"]
+
+
 # ==================== GET /api/processes/{process_id}/requirements ====================
 
 
@@ -451,11 +484,11 @@ def test_get_process_requirements_connection_error(
     assert "Database connection error" in data["detail"]
 
 
-def test_get_process_requirements_service_error(client: TestClient, mock_service: MagicMock) -> None:
+def test_get_process_requirements_service_error(
+    client: TestClient, mock_service: MagicMock
+) -> None:
     """Test handling of general service error."""
-    mock_service.get_process_requirements = AsyncMock(
-        side_effect=GraphServiceError("Query failed")
-    )
+    mock_service.get_process_requirements = AsyncMock(side_effect=GraphServiceError("Query failed"))
 
     response = client.get("/api/processes/boston_resident_parking_permit/requirements")
 
