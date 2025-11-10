@@ -377,7 +377,8 @@ async def test_execute_tool_call_unknown_tool(agent):
     result = await agent._execute_tool_call("unknown_tool", {})
 
     assert "error" in result
-    assert "Unknown tool" in result["message"]
+    assert result["error"] == "internal_error"
+    assert "internal error" in result["message"].lower()
 
 
 # ==================== Core Question Tests (Issue #16) ====================
@@ -870,3 +871,433 @@ def test_system_prompt_contains_refusal_guidance(agent):
 
     assert "legal advice" in prompt.lower()
     assert "refuse" in prompt.lower() or "politely" in prompt.lower()
+
+
+# ==================== HIGH Priority Missing Tests ====================
+
+
+@pytest.mark.asyncio
+async def test_facts_service_exception_handling(agent):
+    """Test graceful handling when FactsService throws exceptions."""
+    agent.facts_service.get_fact_by_id.side_effect = Exception("FactsService connection failed")
+
+    agent._mock_client.messages.create.side_effect = [
+        Message(
+            id="msg_1",
+            model="claude-sonnet-4-5-20250929",
+            role="assistant",
+            content=[
+                ToolUseBlock(
+                    id="tool_1",
+                    type="tool_use",
+                    name="query_facts",
+                    input={"query_type": "by_id", "fact_id": "rpp.permit.cost"},
+                )
+            ],
+            stop_reason="tool_use",
+            usage=Usage(input_tokens=100, output_tokens=50),
+            type="message",
+        ),
+        Message(
+            id="msg_2",
+            model="claude-sonnet-4-5-20250929",
+            role="assistant",
+            content=[
+                TextBlock(
+                    type="text",
+                    text="I encountered an error accessing the facts database. Please try again later.",
+                )
+            ],
+            stop_reason="end_turn",
+            usage=Usage(input_tokens=200, output_tokens=100),
+            type="message",
+        ),
+    ]
+
+    response = await agent.ask("How much does the permit cost?")
+
+    # Should still return a response even if tool failed
+    assert isinstance(response, ConversationResponse)
+    assert len(response.answer) > 0
+
+
+@pytest.mark.asyncio
+async def test_empty_llm_response(agent):
+    """Test handling when LLM returns no text content."""
+    agent._mock_client.messages.create.return_value = Message(
+        id="msg_1",
+        model="claude-sonnet-4-5-20250929",
+        role="assistant",
+        content=[],  # Empty content
+        stop_reason="end_turn",
+        usage=Usage(input_tokens=100, output_tokens=0),
+        type="message",
+    )
+
+    with pytest.raises(ConversationAgentError, match="No text response"):
+        await agent.ask("What is the weather?")
+
+
+@pytest.mark.asyncio
+async def test_generic_exception_wrapped_in_conversation_agent_error(agent):
+    """Test that unexpected exceptions are wrapped in ConversationAgentError."""
+    # Mock LLM to raise an unexpected exception
+    agent._mock_client.messages.create.side_effect = RuntimeError("Unexpected API error")
+
+    with pytest.raises(ConversationAgentError, match="Failed to generate response"):
+        await agent.ask("Test question")
+
+
+@pytest.mark.asyncio
+async def test_execute_graph_query_get_process_requirements(agent):
+    """Test executing graph query for process requirements."""
+    result = await agent._execute_graph_query(
+        {"query_type": "get_process_requirements", "process_id": "boston_resident_parking_permit"}
+    )
+
+    assert "requirements" in result
+    assert len(result["requirements"]) == 2
+    assert result["requirements"][0]["requirement_id"] == "rpp_req_ma_registration"
+
+
+# ==================== MEDIUM Priority Missing Tests ====================
+
+
+@pytest.mark.asyncio
+async def test_execute_graph_query_get_step_office(agent):
+    """Test executing graph query for step office."""
+    result = await agent._execute_graph_query(
+        {"query_type": "get_step_office", "step_id": "rpp_step_3_submit_application"}
+    )
+
+    assert "office" in result
+    assert result["office"]["office_id"] == "boston_parking_clerk"
+
+
+@pytest.mark.asyncio
+async def test_execute_graph_query_get_step_documents(agent):
+    """Test executing graph query for step documents."""
+    agent.graph_service.get_step_document_types.return_value = []
+
+    result = await agent._execute_graph_query(
+        {"query_type": "get_step_documents", "step_id": "rpp_step_2_gather_documents"}
+    )
+
+    assert "documents" in result
+    assert isinstance(result["documents"], list)
+
+
+@pytest.mark.asyncio
+async def test_execute_graph_query_get_requirement_documents(agent):
+    """Test executing graph query for requirement documents."""
+    agent.graph_service.get_requirement_document_types.return_value = []
+
+    result = await agent._execute_graph_query(
+        {"query_type": "get_requirement_documents", "requirement_id": "rpp_req_proof_of_residency"}
+    )
+
+    assert "documents" in result
+    assert isinstance(result["documents"], list)
+
+
+@pytest.mark.asyncio
+async def test_execute_facts_query_all(agent):
+    """Test executing facts query with type 'all'."""
+    all_facts = [
+        Fact(
+            id="rpp.test.fact1",
+            text="Test fact 1",
+            source_url="https://example.com",
+            last_verified=date(2025, 11, 9),
+            confidence=ConfidenceLevel.HIGH,
+        ),
+        Fact(
+            id="rpp.test.fact2",
+            text="Test fact 2",
+            source_url="https://example.com",
+            last_verified=date(2025, 11, 9),
+            confidence=ConfidenceLevel.HIGH,
+        ),
+    ]
+    agent.facts_service.get_all_facts.return_value = all_facts
+
+    result = await agent._execute_facts_query({"query_type": "all"})
+
+    assert "facts" in result
+    assert len(result["facts"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_execute_graph_query_unknown_type_error(agent):
+    """Test error handling for unknown graph query_type."""
+    result = await agent._execute_graph_query({"query_type": "unknown_type"})
+
+    assert "error" in result
+    assert "Unknown query_type" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_execute_facts_query_unknown_type_error(agent):
+    """Test error handling for unknown facts query_type."""
+    result = await agent._execute_facts_query({"query_type": "unknown_type"})
+
+    assert "error" in result
+    assert "Unknown query_type" in result["error"]
+
+
+def test_get_conversation_agent_factory_with_defaults(mock_graph_service, mock_facts_service):
+    """Test factory function creates agent with default services."""
+    with patch("src.services.graph_service.get_graph_service", return_value=mock_graph_service):
+        with patch("src.services.facts_service.get_facts_service", return_value=mock_facts_service):
+            with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key"}):
+                from src.agents.conversation import get_conversation_agent
+
+                agent = get_conversation_agent()
+
+                assert agent is not None
+                assert agent.graph_service == mock_graph_service
+                assert agent.facts_service == mock_facts_service
+                # Verify load_registry was called
+                mock_facts_service.load_registry.assert_called_once_with("boston_rpp")
+
+
+def test_get_conversation_agent_factory_with_provided_services(
+    mock_graph_service, mock_facts_service
+):
+    """Test factory function with provided services."""
+    from src.agents.conversation import get_conversation_agent
+
+    with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key"}):
+        agent = get_conversation_agent(
+            graph_service=mock_graph_service, facts_service=mock_facts_service, api_key="test-key"
+        )
+
+        assert agent.graph_service == mock_graph_service
+        assert agent.facts_service == mock_facts_service
+
+
+@pytest.mark.asyncio
+async def test_multiple_tool_calls_in_single_response(agent):
+    """Test handling multiple ToolUseBlocks in single response."""
+    agent._mock_client.messages.create.side_effect = [
+        Message(
+            id="msg_1",
+            model="claude-sonnet-4-5-20250929",
+            role="assistant",
+            content=[
+                ToolUseBlock(
+                    id="tool_1",
+                    type="tool_use",
+                    name="query_facts",
+                    input={"query_type": "by_id", "fact_id": "rpp.permit.cost"},
+                ),
+                ToolUseBlock(
+                    id="tool_2",
+                    type="tool_use",
+                    name="query_facts",
+                    input={"query_type": "by_id", "fact_id": "rpp.office.location"},
+                ),
+            ],
+            stop_reason="tool_use",
+            usage=Usage(input_tokens=100, output_tokens=50),
+            type="message",
+        ),
+        Message(
+            id="msg_2",
+            model="claude-sonnet-4-5-20250929",
+            role="assistant",
+            content=[
+                TextBlock(
+                    type="text",
+                    text="The permit is free and the office is at City Hall.",
+                )
+            ],
+            stop_reason="end_turn",
+            usage=Usage(input_tokens=200, output_tokens=100),
+            type="message",
+        ),
+    ]
+
+    response = await agent.ask("How much and where?")
+
+    assert isinstance(response, ConversationResponse)
+    assert len(response.tool_calls_made) == 2
+    assert response.tool_calls_made.count("query_facts") == 2
+
+
+# ==================== Input Validation Tests ====================
+
+
+@pytest.mark.asyncio
+async def test_ask_empty_question_raises_error(agent):
+    """Test that empty question raises ValueError."""
+    with pytest.raises(ValueError, match="Question cannot be empty"):
+        await agent.ask("")
+
+
+@pytest.mark.asyncio
+async def test_ask_whitespace_only_question_raises_error(agent):
+    """Test that whitespace-only question raises ValueError."""
+    with pytest.raises(ValueError, match="Question cannot be empty"):
+        await agent.ask("   \n\t  ")
+
+
+@pytest.mark.asyncio
+async def test_ask_too_long_question_raises_error(agent):
+    """Test that overly long question raises ValueError."""
+    long_question = "x" * 10001
+    with pytest.raises(ValueError, match="exceeds maximum length"):
+        await agent.ask(long_question)
+
+
+@pytest.mark.asyncio
+async def test_ask_invalid_max_iterations_below_range(agent):
+    """Test that max_iterations below 1 raises ValueError."""
+    with pytest.raises(ValueError, match="max_iterations must be an integer between 1 and 20"):
+        await agent.ask("Test question", max_iterations=0)
+
+
+@pytest.mark.asyncio
+async def test_ask_invalid_max_iterations_above_range(agent):
+    """Test that max_iterations above 20 raises ValueError."""
+    with pytest.raises(ValueError, match="max_iterations must be an integer between 1 and 20"):
+        await agent.ask("Test question", max_iterations=21)
+
+
+@pytest.mark.asyncio
+async def test_ask_invalid_max_iterations_non_integer(agent):
+    """Test that non-integer max_iterations raises ValueError."""
+    with pytest.raises(ValueError, match="max_iterations must be an integer between 1 and 20"):
+        await agent.ask("Test question", max_iterations="5")  # type: ignore
+
+
+# ==================== Tool Parameter Validation Tests ====================
+
+
+@pytest.mark.asyncio
+async def test_execute_graph_query_missing_process_id(agent):
+    """Test error when process_id is missing."""
+    result = await agent._execute_graph_query({"query_type": "get_process"})
+
+    assert "error" in result
+    assert "Missing required parameter: process_id" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_execute_graph_query_missing_step_id(agent):
+    """Test error when step_id is missing."""
+    result = await agent._execute_graph_query({"query_type": "get_step_office"})
+
+    assert "error" in result
+    assert "Missing required parameter: step_id" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_execute_graph_query_missing_requirement_id(agent):
+    """Test error when requirement_id is missing."""
+    result = await agent._execute_graph_query({"query_type": "get_requirement_documents"})
+
+    assert "error" in result
+    assert "Missing required parameter: requirement_id" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_execute_facts_query_missing_fact_id(agent):
+    """Test error when fact_id is missing."""
+    result = await agent._execute_facts_query({"query_type": "by_id"})
+
+    assert "error" in result
+    assert "Missing required parameter: fact_id" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_execute_facts_query_missing_prefix(agent):
+    """Test error when prefix is missing."""
+    result = await agent._execute_facts_query({"query_type": "by_prefix"})
+
+    assert "error" in result
+    assert "Missing required parameter: prefix" in result["error"]
+
+
+# ==================== Citation Validation Tests ====================
+
+
+def test_extract_citations_malformed_fact_missing_url(agent):
+    """Test that malformed fact data (missing source_url) is skipped."""
+    tool_results = [
+        {
+            "fact": {
+                "id": "rpp.test.fact",
+                "text": "Test fact",
+                # Missing source_url
+            }
+        }
+    ]
+
+    citations = agent._extract_citations_from_response("test response", tool_results)
+
+    assert len(citations) == 0
+
+
+def test_extract_citations_malformed_fact_missing_text(agent):
+    """Test that malformed fact data (missing text) is skipped."""
+    tool_results = [
+        {
+            "fact": {
+                "id": "rpp.test.fact",
+                "source_url": "https://example.com",
+                # Missing text
+            }
+        }
+    ]
+
+    citations = agent._extract_citations_from_response("test response", tool_results)
+
+    assert len(citations) == 0
+
+
+def test_extract_citations_malformed_fact_missing_id(agent):
+    """Test that malformed fact data (missing id) is skipped."""
+    tool_results = [
+        {
+            "fact": {
+                # Missing id
+                "text": "Test fact",
+                "source_url": "https://example.com",
+            }
+        }
+    ]
+
+    citations = agent._extract_citations_from_response("test response", tool_results)
+
+    assert len(citations) == 0
+
+
+def test_extract_citations_malformed_facts_array(agent):
+    """Test that malformed fact data in facts array is skipped."""
+    tool_results = [
+        {
+            "facts": [
+                {
+                    "id": "rpp.test.fact1",
+                    "text": "Valid fact",
+                    "source_url": "https://example.com",
+                },
+                {
+                    "id": "rpp.test.fact2",
+                    # Missing text and source_url
+                },
+                {
+                    # Missing id
+                    "text": "Another fact",
+                    "source_url": "https://example.com",
+                },
+            ]
+        }
+    ]
+
+    citations = agent._extract_citations_from_response("test response", tool_results)
+
+    # Only the valid fact should be included
+    assert len(citations) == 1
+    assert citations[0].fact_id == "rpp.test.fact1"
