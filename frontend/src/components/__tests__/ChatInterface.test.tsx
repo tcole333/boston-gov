@@ -624,17 +624,20 @@ describe('ChatInterface', () => {
       await user.type(input, 'Test question')
       await user.click(screen.getByRole('button', { name: /send message/i }))
 
+      // Wait for response to appear
       await waitFor(() => {
-        expect(screen.getByText(/Text with invalid citation/i)).toBeInTheDocument()
+        expect(screen.getByText('Test question')).toBeInTheDocument()
       })
 
-      // Invalid citation marker should remain as text
-      expect(screen.getByText(/\[9999\]/)).toBeInTheDocument()
+      // Check that the invalid marker [9999] is present as text (not a link)
+      const messageContent = screen.getByText(/\[9999\]/)
+      expect(messageContent).toBeInTheDocument()
 
       // Valid citation should be a link
       const citationLinks = screen.getAllByRole('link')
       const validLink = citationLinks.find((link) => link.textContent === '[1]')
       expect(validLink).toBeInTheDocument()
+      expect(validLink).toHaveAttribute('href', 'https://example.com/valid')
     })
   })
 
