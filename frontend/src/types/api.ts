@@ -110,6 +110,42 @@ export interface DocumentValidationResponse {
 }
 
 /**
+ * Document type for upload and validation.
+ */
+export type DocumentType = 'proof_of_residency' | 'vehicle_registration' | 'license'
+
+/**
+ * Document upload status.
+ */
+export type DocumentUploadStatus = 'uploaded' | 'processing' | 'verified' | 'rejected'
+
+/**
+ * Document upload response from backend.
+ *
+ * Backend endpoint: POST /api/documents/upload
+ * Content-Type: multipart/form-data
+ */
+export interface DocumentUploadResponse {
+  /** Unique document identifier */
+  document_id: string
+  /** Original filename (sanitized) */
+  filename: string
+  /** Current status of the document */
+  status: DocumentUploadStatus
+  /** Timestamp when the document was uploaded */
+  upload_timestamp: string
+  /** Validation result (if processing complete) */
+  validation_result?: {
+    /** Whether validation passed */
+    passed: boolean
+    /** Validation message or explanation */
+    message: string
+    /** Citations for validation rules if available */
+    citations?: Citation[]
+  }
+}
+
+/**
  * API error response (FastAPI standard format).
  */
 export interface ApiError {
