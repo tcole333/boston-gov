@@ -32,12 +32,13 @@ const isSafeUrl = (url: string): boolean => {
 /**
  * Validates that an ID has a safe format.
  * Prevents injection attacks via malformed IDs.
+ * Only allows alphanumeric characters, underscores, hyphens, and dots.
  *
  * @param id - The ID to validate
  * @returns true if the ID is valid, false otherwise
  */
 const isValidId = (id: string): boolean => {
-  return /^[a-zA-Z0-9_-]{1,100}$/.test(id)
+  return /^[a-zA-Z0-9_.-]{1,100}$/.test(id)
 }
 
 // DoS protection: Maximum number of items to render
