@@ -48,3 +48,6 @@ export type {
   ApiError,
   ApiResponse,
 } from './api'
+
+// Application state types
+export type { Message, AppState, AppProviderOptions } from './state'
