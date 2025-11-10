@@ -265,6 +265,7 @@ export const AppProvider = ({ children, options = {} }: AppProviderProps): JSX.E
  * const { messages, addMessage, selectedStepId, setSelectedStep } = useAppContext()
  * ```
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export const useAppContext = (): AppState => {
   const context = useContext(AppContext)
 

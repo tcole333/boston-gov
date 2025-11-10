@@ -17,7 +17,6 @@ import { render, screen, renderHook, act, waitFor } from '@testing-library/react
 import userEvent from '@testing-library/user-event'
 import '@testing-library/jest-dom'
 import { AppProvider, useAppContext } from '../AppContext'
-import type { Message, AppState } from '../../types/state'
 import type { ReactNode } from 'react'
 
 // Test component that uses the context
