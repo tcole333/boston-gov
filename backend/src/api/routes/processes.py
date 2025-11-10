@@ -38,6 +38,7 @@ def get_graph_service_dependency() -> GraphService:
     client = get_neo4j_client()
     return GraphService(client)
 
+
 # Create router with prefix and tags
 router = APIRouter(prefix="/api/processes", tags=["processes"])
 

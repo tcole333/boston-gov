@@ -1,5 +1,13 @@
 """Business logic layer."""
 
+from .facts_service import (
+    FactsService,
+    FactsServiceError,
+    RegistryNotFoundError,
+    RegistryParseError,
+    RegistryValidationError,
+    get_facts_service,
+)
 from .graph_service import (
     ConnectionError,
     GraphService,
@@ -14,4 +22,10 @@ __all__ = [
     "NotFoundError",
     "ConnectionError",
     "get_graph_service",
+    "FactsService",
+    "FactsServiceError",
+    "RegistryNotFoundError",
+    "RegistryParseError",
+    "RegistryValidationError",
+    "get_facts_service",
 ]
