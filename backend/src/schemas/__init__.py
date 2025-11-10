@@ -1,5 +1,9 @@
 """Pydantic models for request/response validation."""
 
+from src.schemas.facts import (
+    Fact,
+    FactsRegistry,
+)
 from src.schemas.graph import (
     Application,
     ApplicationCategory,
@@ -29,6 +33,8 @@ __all__ = [
     "ConfidenceLevel",
     "Document",
     "DocumentType",
+    "Fact",
+    "FactsRegistry",
     "Office",
     "Person",
     "Process",
