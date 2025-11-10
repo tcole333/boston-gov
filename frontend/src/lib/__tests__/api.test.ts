@@ -3,7 +3,6 @@
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unused-vars */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import axios, { AxiosError, AxiosInstance } from 'axios'
@@ -128,6 +127,52 @@ describe('API Client', () => {
       }
     })
 
+    it('should handle 401 Unauthorized errors', async () => {
+      const errorInterceptor = getErrorInterceptor()
+      if (!errorInterceptor) return
+
+      const unauthorizedError = {
+        isAxiosError: true,
+        response: {
+          status: 401,
+          data: {} as ApiError,
+          statusText: 'Unauthorized',
+          headers: {},
+          config: {},
+        },
+      } as AxiosError<ApiError>
+
+      try {
+        await errorInterceptor(unauthorizedError)
+      } catch (error) {
+        expect((error as any).userMessage).toContain('Authentication required')
+        expect((error as any).statusCode).toBe(401)
+      }
+    })
+
+    it('should handle 403 Forbidden errors', async () => {
+      const errorInterceptor = getErrorInterceptor()
+      if (!errorInterceptor) return
+
+      const forbiddenError = {
+        isAxiosError: true,
+        response: {
+          status: 403,
+          data: {} as ApiError,
+          statusText: 'Forbidden',
+          headers: {},
+          config: {},
+        },
+      } as AxiosError<ApiError>
+
+      try {
+        await errorInterceptor(forbiddenError)
+      } catch (error) {
+        expect((error as any).userMessage).toContain('permission')
+        expect((error as any).statusCode).toBe(403)
+      }
+    })
+
     it('should handle 404 Not Found errors', async () => {
       const errorInterceptor = getErrorInterceptor()
       if (!errorInterceptor) return
@@ -147,6 +192,52 @@ describe('API Client', () => {
         await errorInterceptor(notFoundError)
       } catch (error) {
         expect((error as any).userMessage).toContain('not found')
+      }
+    })
+
+    it('should handle 409 Conflict errors', async () => {
+      const errorInterceptor = getErrorInterceptor()
+      if (!errorInterceptor) return
+
+      const conflictError = {
+        isAxiosError: true,
+        response: {
+          status: 409,
+          data: {} as ApiError,
+          statusText: 'Conflict',
+          headers: {},
+          config: {},
+        },
+      } as AxiosError<ApiError>
+
+      try {
+        await errorInterceptor(conflictError)
+      } catch (error) {
+        expect((error as any).userMessage).toContain('conflict')
+        expect((error as any).statusCode).toBe(409)
+      }
+    })
+
+    it('should handle 422 Unprocessable Entity errors', async () => {
+      const errorInterceptor = getErrorInterceptor()
+      if (!errorInterceptor) return
+
+      const unprocessableError = {
+        isAxiosError: true,
+        response: {
+          status: 422,
+          data: {} as ApiError,
+          statusText: 'Unprocessable Entity',
+          headers: {},
+          config: {},
+        },
+      } as AxiosError<ApiError>
+
+      try {
+        await errorInterceptor(unprocessableError)
+      } catch (error) {
+        expect((error as any).userMessage).toContain('could not be processed')
+        expect((error as any).statusCode).toBe(422)
       }
     })
 
@@ -213,6 +304,53 @@ describe('API Client', () => {
         await errorInterceptor(customError)
       } catch (error) {
         expect((error as any).userMessage).toBe('Custom error message from backend')
+      }
+    })
+
+    it('should sanitize HTML tags from backend error messages (XSS protection)', async () => {
+      const errorInterceptor = getErrorInterceptor()
+      if (!errorInterceptor) return
+
+      const xssError = {
+        isAxiosError: true,
+        response: {
+          status: 400,
+          data: { detail: '<script>alert("XSS")</script>Error message' } as ApiError,
+          statusText: 'Bad Request',
+          headers: {},
+          config: {},
+        },
+      } as AxiosError<ApiError>
+
+      try {
+        await errorInterceptor(xssError)
+      } catch (error) {
+        expect((error as any).userMessage).toBe('Error message')
+        expect((error as any).userMessage).not.toContain('<script>')
+        expect((error as any).userMessage).not.toContain('</script>')
+      }
+    })
+
+    it('should limit backend error message length to 500 characters', async () => {
+      const errorInterceptor = getErrorInterceptor()
+      if (!errorInterceptor) return
+
+      const longMessage = 'A'.repeat(600)
+      const longError = {
+        isAxiosError: true,
+        response: {
+          status: 400,
+          data: { detail: longMessage } as ApiError,
+          statusText: 'Bad Request',
+          headers: {},
+          config: {},
+        },
+      } as AxiosError<ApiError>
+
+      try {
+        await errorInterceptor(longError)
+      } catch (error) {
+        expect((error as any).userMessage.length).toBeLessThanOrEqual(500)
       }
     })
 
