@@ -1,90 +1,62 @@
 /**
  * TypeScript types for API client and backend responses.
  *
- * These types mirror the Pydantic schemas from the backend.
+ * These types mirror the Pydantic schemas from backend/src/schemas/agent.py
+ * and provide frontend-specific types for API communication.
+ *
+ * For graph entity types, import from './graph'
+ * For Facts Registry types, import from './facts'
  */
 
 /**
  * Citation for a fact or regulatory claim.
+ *
+ * Citations ensure all regulatory claims are traceable to official sources.
+ * They can reference either Facts Registry entries (with fact_id) or graph nodes.
+ *
+ * Backend schema: backend/src/schemas/agent.py:Citation
  */
 export interface Citation {
-  fact_id: string
+  /** Unique fact identifier from Facts Registry (optional for graph citations) */
+  fact_id: string | null
+  /** URL to the official source document */
   url: string
+  /** The cited text or claim being referenced */
   text: string
-  source_section?: string
+  /** Section/page reference within the source (optional) */
+  source_section: string | null
 }
 
 /**
  * Chat message request.
  */
 export interface ChatRequest {
+  /** User's chat message */
   message: string
+  /** Optional session ID for conversation continuity */
   session_id?: string | null
 }
 
 /**
- * Chat conversation response with citations.
+ * Response from a conversation agent.
+ *
+ * This schema ensures that conversation agents return properly formatted responses
+ * with inline citations and structured citation metadata.
+ *
+ * Backend schema: backend/src/schemas/agent.py:ConversationResponse
  */
 export interface ConversationResponse {
+  /** Natural language response with inline citation links */
   answer: string
+  /** List of citations for all sources referenced in the answer */
   citations: Citation[]
+  /** List of tool names called during response generation (for debugging) */
   tool_calls_made: string[]
 }
 
 /**
- * Fact from the Facts Registry.
- */
-export interface Fact {
-  id: string
-  content: string
-  source_url: string
-  source_section?: string | null
-  last_verified: string
-  confidence: 'high' | 'medium' | 'low'
-  tags?: string[]
-  metadata?: Record<string, unknown>
-}
-
-/**
- * Process details.
- */
-export interface Process {
-  id: string
-  name: string
-  description: string
-  jurisdiction: string
-  category: string
-  created_at: string
-  updated_at: string
-}
-
-/**
- * Step in a process.
- */
-export interface Step {
-  id: string
-  name: string
-  description: string
-  order: number
-  estimated_time?: string | null
-  required: boolean
-  notes?: string | null
-}
-
-/**
- * Requirement for a process or step.
- */
-export interface Requirement {
-  id: string
-  name: string
-  description: string
-  required: boolean
-  type: string
-  notes?: string | null
-}
-
-/**
- * DAG node for visualization.
+ * DAG node for frontend visualization.
+ * This is a frontend-specific type for rendering process graphs.
  */
 export interface DagNode {
   id: string
@@ -94,7 +66,8 @@ export interface DagNode {
 }
 
 /**
- * DAG edge for visualization.
+ * DAG edge for frontend visualization.
+ * This is a frontend-specific type for rendering process graphs.
  */
 export interface DagEdge {
   source: string
@@ -103,7 +76,8 @@ export interface DagEdge {
 }
 
 /**
- * Process DAG for visualization.
+ * Process DAG for frontend visualization.
+ * This is a frontend-specific type for rendering process graphs.
  */
 export interface ProcessDag {
   nodes: DagNode[]
@@ -111,7 +85,8 @@ export interface ProcessDag {
 }
 
 /**
- * Registry metadata.
+ * Registry metadata for Facts Registry API responses.
+ * This is a frontend-specific type for API communication.
  */
 export interface RegistryMetadata {
   registry_name: string
@@ -122,14 +97,28 @@ export interface RegistryMetadata {
 }
 
 /**
- * API error response.
+ * Document validation response from backend.
+ * Used when validating user-uploaded documents against requirements.
+ */
+export interface DocumentValidationResponse {
+  /** Whether the document passed validation */
+  valid: boolean
+  /** List of validation errors if any */
+  errors: string[]
+  /** Document ID if validation passed */
+  doc_id: string | null
+}
+
+/**
+ * API error response (FastAPI standard format).
  */
 export interface ApiError {
   detail: string
 }
 
 /**
- * Generic API response wrapper for errors.
+ * Generic API response wrapper.
+ * This is a frontend-specific type for handling API responses with errors.
  */
 export interface ApiResponse<T> {
   data?: T
