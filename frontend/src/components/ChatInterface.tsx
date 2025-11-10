@@ -124,7 +124,7 @@ const CitationList = ({ citations }: CitationListProps): JSX.Element => {
                 {citation.text}
               </a>
               {citation.source_section && (
-                <span style={{ color: '#777' }}> ({citation.source_section})</span>
+                <span style={{ color: '#595959' }}> ({citation.source_section})</span>
               )}
             </li>
           )
@@ -244,6 +244,9 @@ const LoadingIndicator = (): JSX.Element => {
         justifyContent: 'flex-start',
         marginBottom: '1rem',
       }}
+      role="status"
+      aria-live="polite"
+      aria-label="Assistant is typing"
     >
       <div
         style={{
@@ -258,7 +261,7 @@ const LoadingIndicator = (): JSX.Element => {
               width: '8px',
               height: '8px',
               borderRadius: '50%',
-              backgroundColor: '#999',
+              backgroundColor: '#767676',
               animation: 'pulse 1.4s infinite ease-in-out',
               animationDelay: '0s',
             }}
@@ -268,7 +271,7 @@ const LoadingIndicator = (): JSX.Element => {
               width: '8px',
               height: '8px',
               borderRadius: '50%',
-              backgroundColor: '#999',
+              backgroundColor: '#767676',
               animation: 'pulse 1.4s infinite ease-in-out',
               animationDelay: '0.2s',
             }}
@@ -278,7 +281,7 @@ const LoadingIndicator = (): JSX.Element => {
               width: '8px',
               height: '8px',
               borderRadius: '50%',
-              backgroundColor: '#999',
+              backgroundColor: '#767676',
               animation: 'pulse 1.4s infinite ease-in-out',
               animationDelay: '0.4s',
             }}
@@ -303,6 +306,7 @@ const LoadingIndicator = (): JSX.Element => {
  * - Disabled input while waiting for response
  */
 export const ChatInterface = (): JSX.Element => {
+  const MAX_MESSAGE_LENGTH = 2000
   const [messages, setMessages] = useState<Message[]>([])
   const [inputValue, setInputValue] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -340,7 +344,13 @@ export const ChatInterface = (): JSX.Element => {
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    const scrollTarget = messagesEndRef.current
+    scrollTarget?.scrollIntoView({ behavior: 'smooth' })
+
+    // Cleanup function (no actual cleanup needed for scrollIntoView, but good practice)
+    return () => {
+      // No cleanup needed for scrollIntoView
+    }
   }, [messages, mutation.isPending])
 
   // Handle send message
@@ -406,7 +416,7 @@ export const ChatInterface = (): JSX.Element => {
         <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 600 }}>
           Boston Parking Permit Assistant
         </h2>
-        <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.875rem', color: '#666' }}>
+        <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.875rem', color: '#595959' }}>
           Ask questions about resident parking permits
         </p>
       </div>
@@ -428,7 +438,7 @@ export const ChatInterface = (): JSX.Element => {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#999',
+              color: '#767676',
               textAlign: 'center',
               padding: '2rem',
             }}
@@ -483,10 +493,16 @@ export const ChatInterface = (): JSX.Element => {
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <textarea
             value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
+            onChange={(e) => {
+              const newValue = e.target.value
+              if (newValue.length <= MAX_MESSAGE_LENGTH) {
+                setInputValue(newValue)
+              }
+            }}
             onKeyDown={handleKeyDown}
             placeholder="Type your question here..."
             disabled={mutation.isPending}
+            maxLength={MAX_MESSAGE_LENGTH}
             style={{
               flex: 1,
               padding: '0.75rem',
@@ -498,7 +514,7 @@ export const ChatInterface = (): JSX.Element => {
               minHeight: '60px',
               maxHeight: '120px',
               backgroundColor: mutation.isPending ? '#f5f5f5' : '#ffffff',
-              color: mutation.isPending ? '#999' : '#333',
+              color: mutation.isPending ? '#767676' : '#333',
             }}
             aria-label="Message input"
           />
@@ -521,15 +537,33 @@ export const ChatInterface = (): JSX.Element => {
             {mutation.isPending ? 'Sending...' : 'Send'}
           </button>
         </div>
-        <p
+        <div
           style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
             margin: '0.5rem 0 0 0',
-            fontSize: '0.75rem',
-            color: '#999',
           }}
         >
-          Press Enter to send, Shift+Enter for new line
-        </p>
+          <p
+            style={{
+              margin: 0,
+              fontSize: '0.75rem',
+              color: '#767676',
+            }}
+          >
+            Press Enter to send, Shift+Enter for new line
+          </p>
+          <p
+            style={{
+              margin: 0,
+              fontSize: '0.75rem',
+              color: inputValue.length > MAX_MESSAGE_LENGTH * 0.9 ? '#c00' : '#767676',
+            }}
+          >
+            {inputValue.length} / {MAX_MESSAGE_LENGTH}
+          </p>
+        </div>
       </form>
 
       {/* CSS animation for loading dots */}
