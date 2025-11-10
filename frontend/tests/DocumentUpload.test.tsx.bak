@@ -40,11 +40,10 @@ const uploadFile = (input: HTMLInputElement, file: File): void => {
     item: () => file,
   }
 
-  // Set the files property (use configurable: true to allow redefinition)
+  // Set the files property
   Object.defineProperty(input, 'files', {
     value: fileList,
     writable: false,
-    configurable: true,
   })
 
   // Trigger change event
@@ -98,19 +97,14 @@ const mockFailureResponse: DocumentUploadResponse = {
 
 // Setup MSW server
 const server = setupServer(
-  http.post(`${API_BASE_URL}/documents/upload`, async ({ request }) => {
-    console.log('[MSW] Intercepted upload request:', request.url)
-    // Add small delay to ensure async processing
-    await new Promise((resolve) => setTimeout(resolve, 100))
-    console.log('[MSW] Returning response after delay')
-    return HttpResponse.json(mockSuccessResponse, { status: 200 })
+  http.post(`${API_BASE_URL}/documents/upload`, async () => {
+    return HttpResponse.json(mockSuccessResponse)
   })
 )
 
 // Start server before all tests
 beforeAll(() => {
-  server.listen({ onUnhandledRequest: 'warn' })
-  console.log('[Test Setup] MSW server started')
+  server.listen({ onUnhandledRequest: 'error' })
 })
 
 // Reset handlers after each test
@@ -239,7 +233,7 @@ describe('DocumentUpload', () => {
       const input = screen.getByLabelText('File input') as HTMLInputElement
 
       // Use fireEvent for file input to ensure change event fires
-      uploadFile(input, file)
+      fireEvent.change(input, { target: { files: [file] } })
 
       // Validation error should appear immediately (synchronous validation)
       await waitFor(
@@ -263,7 +257,7 @@ describe('DocumentUpload', () => {
       const file = createTestFile('large.pdf', 11 * 1024 * 1024, 'application/pdf') // 11MB
       const input = screen.getByLabelText('File input') as HTMLInputElement
 
-      uploadFile(input, file)
+      fireEvent.change(input, { target: { files: [file] } })
 
       await waitFor(
         () => {
@@ -281,7 +275,7 @@ describe('DocumentUpload', () => {
       const file = createTestFile('empty.pdf', 0, 'application/pdf')
       const input = screen.getByLabelText('File input') as HTMLInputElement
 
-      uploadFile(input, file)
+      fireEvent.change(input, { target: { files: [file] } })
 
       await waitFor(
         () => {
@@ -327,7 +321,7 @@ describe('DocumentUpload', () => {
       const file = createTestFile('test.pdf', 1024, 'application/pdf')
       const input = screen.getByLabelText('File input') as HTMLInputElement
 
-      uploadFile(input, file)
+      fireEvent.change(input, { target: { files: [file] } })
 
       const uploadButton = screen.getByRole('button', { name: /Upload document/i })
       await user.click(uploadButton)
@@ -346,7 +340,7 @@ describe('DocumentUpload', () => {
           expect(screen.getByText('Validation Passed')).toBeInTheDocument()
           expect(screen.getByText(/Document meets all requirements/i)).toBeInTheDocument()
         },
-        { timeout: 5000 }
+        { timeout: 3000 }
       )
 
       // Should call success callback
@@ -368,7 +362,7 @@ describe('DocumentUpload', () => {
       const file = createTestFile('test.jpg', 1024, 'image/jpeg')
       const input = screen.getByLabelText('File input') as HTMLInputElement
 
-      uploadFile(input, file)
+      fireEvent.change(input, { target: { files: [file] } })
 
       const uploadButton = screen.getByRole('button', { name: /Upload document/i })
       await user.click(uploadButton)
@@ -413,7 +407,7 @@ describe('DocumentUpload', () => {
       const file = createTestFile('test.pdf', 1024, 'application/pdf')
       const input = screen.getByLabelText('File input') as HTMLInputElement
 
-      uploadFile(input, file)
+      fireEvent.change(input, { target: { files: [file] } })
 
       const uploadButton = screen.getByRole('button', { name: /Upload document/i })
       await user.click(uploadButton)
@@ -446,7 +440,7 @@ describe('DocumentUpload', () => {
       const file = createTestFile('test.pdf', 1024, 'application/pdf')
       const input = screen.getByLabelText('File input') as HTMLInputElement
 
-      uploadFile(input, file)
+      fireEvent.change(input, { target: { files: [file] } })
 
       const uploadButton = screen.getByRole('button', { name: /Upload document/i })
       await user.click(uploadButton)
@@ -470,7 +464,7 @@ describe('DocumentUpload', () => {
       const file = createTestFile('test.pdf', 1024, 'application/pdf')
       const input = screen.getByLabelText('File input') as HTMLInputElement
 
-      uploadFile(input, file)
+      fireEvent.change(input, { target: { files: [file] } })
 
       await waitFor(
         () => {
@@ -501,7 +495,7 @@ describe('DocumentUpload', () => {
       const file = createTestFile('document.txt', 1024, 'text/plain')
       const input = screen.getByLabelText('File input') as HTMLInputElement
 
-      uploadFile(input, file)
+      fireEvent.change(input, { target: { files: [file] } })
 
       // Error should appear
       await waitFor(
@@ -513,7 +507,7 @@ describe('DocumentUpload', () => {
 
       // Select valid file
       const validFile = createTestFile('test.pdf', 1024, 'application/pdf')
-      uploadFile(input, validFile)
+      fireEvent.change(input, { target: { files: [validFile] } })
 
       // Error should be cleared
       await waitFor(
@@ -531,7 +525,7 @@ describe('DocumentUpload', () => {
       const file = createTestFile('test.pdf', 1024, 'application/pdf')
       const input = screen.getByLabelText('File input') as HTMLInputElement
 
-      uploadFile(input, file)
+      fireEvent.change(input, { target: { files: [file] } })
 
       const uploadButton = screen.getByRole('button', { name: /Upload document/i })
       await user.click(uploadButton)
@@ -546,7 +540,7 @@ describe('DocumentUpload', () => {
 
       // Select new file
       const newFile = createTestFile('test2.pdf', 2048, 'application/pdf')
-      uploadFile(input, newFile)
+      fireEvent.change(input, { target: { files: [newFile] } })
 
       // Previous result should be cleared
       await waitFor(
@@ -588,7 +582,7 @@ describe('DocumentUpload', () => {
       const file = createTestFile('test.pdf', 1024, 'application/pdf')
       const input = screen.getByLabelText('File input') as HTMLInputElement
 
-      uploadFile(input, file)
+      fireEvent.change(input, { target: { files: [file] } })
 
       const uploadButton = screen.getByRole('button', { name: /Upload document/i })
       await user.click(uploadButton)
@@ -609,7 +603,7 @@ describe('DocumentUpload', () => {
       const file = createTestFile('document.txt', 1024, 'text/plain')
       const input = screen.getByLabelText('File input') as HTMLInputElement
 
-      uploadFile(input, file)
+      fireEvent.change(input, { target: { files: [file] } })
 
       await waitFor(
         () => {
@@ -637,7 +631,7 @@ describe('DocumentUpload', () => {
       const file = createTestFile('test.pdf', 1024, 'application/pdf')
       const input = screen.getByLabelText('File input') as HTMLInputElement
 
-      uploadFile(input, file)
+      fireEvent.change(input, { target: { files: [file] } })
 
       const uploadButton = screen.getByRole('button', { name: /Upload document/i })
       await user.click(uploadButton)
@@ -667,7 +661,7 @@ describe('DocumentUpload', () => {
       const file = createTestFile('test.pdf', 1024, 'application/pdf')
       const input = screen.getByLabelText('File input') as HTMLInputElement
 
-      uploadFile(input, file)
+      fireEvent.change(input, { target: { files: [file] } })
 
       const uploadButton = screen.getByRole('button', { name: /Upload document/i })
       await user.click(uploadButton)
@@ -693,7 +687,7 @@ describe('DocumentUpload', () => {
       const file = createTestFile('../../../malicious.pdf', 1024, 'application/pdf')
       const input = screen.getByLabelText('File input') as HTMLInputElement
 
-      uploadFile(input, file)
+      fireEvent.change(input, { target: { files: [file] } })
 
       await waitFor(
         () => {
@@ -727,7 +721,7 @@ describe('DocumentUpload', () => {
       const file = createTestFile('test.pdf', 1024, 'application/pdf')
       const input = screen.getByLabelText('File input') as HTMLInputElement
 
-      uploadFile(input, file)
+      fireEvent.change(input, { target: { files: [file] } })
 
       const uploadButton = screen.getByRole('button', { name: /Upload document/i })
       await user.click(uploadButton)

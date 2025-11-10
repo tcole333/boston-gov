@@ -207,7 +207,7 @@ const ValidationResult = ({ response }: ValidationResultProps): JSX.Element => {
 
       const citationIndex = parseInt(match[1] ?? '0', 10)
 
-      if (citationIndex < 1 || citationIndex > 1000) {
+      if (citationIndex < 1 || citationIndex > result.citations.length) {
         parts.push(match[0] ?? '')
         lastIndex = regex.lastIndex
         continue
