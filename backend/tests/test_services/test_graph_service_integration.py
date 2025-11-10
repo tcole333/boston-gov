@@ -174,9 +174,7 @@ async def test_integration_get_requirement_by_id(graph_service):
 @pytest.mark.asyncio
 async def test_integration_get_hard_gate_requirements(graph_service):
     """Integration test: Retrieve hard-gate requirements."""
-    requirements = await graph_service.get_hard_gate_requirements(
-        "boston_resident_parking_permit"
-    )
+    requirements = await graph_service.get_hard_gate_requirements("boston_resident_parking_permit")
 
     # Should have at least some hard-gate requirements
     assert all(isinstance(r, Requirement) for r in requirements)

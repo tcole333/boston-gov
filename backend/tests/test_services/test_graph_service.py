@@ -22,6 +22,7 @@ from src.schemas.graph import (
     Step,
 )
 from src.services.graph_service import (
+    ConnectionError,
     GraphService,
     GraphServiceError,
     get_graph_service,
@@ -273,9 +274,7 @@ async def test_get_requirement_by_id(graph_service, mock_neo4j_client, sample_re
 
 
 @pytest.mark.asyncio
-async def test_get_process_requirements(
-    graph_service, mock_neo4j_client, sample_requirement_data
-):
+async def test_get_process_requirements(graph_service, mock_neo4j_client, sample_requirement_data):
     """Test retrieval of all requirements for a process."""
     req_2 = sample_requirement_data.copy()
     req_2["requirement_id"] = "req_vehicle_registration"
@@ -307,9 +306,7 @@ async def test_get_hard_gate_requirements(
     mock_neo4j_client.get_session.return_value.__aenter__.return_value = mock_session
 
     # Execute
-    requirements = await graph_service.get_hard_gate_requirements(
-        "boston_resident_parking_permit"
-    )
+    requirements = await graph_service.get_hard_gate_requirements("boston_resident_parking_permit")
 
     # Assert
     assert len(requirements) == 1
@@ -588,6 +585,24 @@ async def test_execute_query_error_handling(graph_service, mock_neo4j_client):
     assert "Database error" in str(exc_info.value)
 
 
+@pytest.mark.asyncio
+async def test_execute_query_connection_error(graph_service, mock_neo4j_client):
+    """Test connection error handling in _execute_query."""
+    from neo4j.exceptions import ServiceUnavailable
+
+    # Mock a connection error
+    mock_session = AsyncMock()
+    mock_session.run = AsyncMock(side_effect=ServiceUnavailable("Connection refused"))
+    mock_neo4j_client.get_session.return_value.__aenter__.return_value = mock_session
+
+    # Execute and expect ConnectionError
+    with pytest.raises(ConnectionError) as exc_info:
+        await graph_service.get_process_by_id("test")
+
+    assert "Database connection failed" in str(exc_info.value)
+    assert "Connection refused" in str(exc_info.value)
+
+
 # ==================== Health Check Tests ====================
 
 
@@ -674,3 +689,393 @@ async def test_get_rpp_neighborhood_by_id(graph_service, mock_neo4j_client):
     assert isinstance(neighborhood, RPPNeighborhood)
     assert neighborhood.nbrhd_id == "back_bay"
     assert neighborhood.name == "Back Bay"
+
+
+@pytest.mark.asyncio
+async def test_get_process_neighborhoods(graph_service, mock_neo4j_client):
+    """Test retrieval of neighborhoods for a process."""
+    # Sample neighborhood data
+    nbrhd_1 = {
+        "nbrhd_id": "back_bay",
+        "name": "Back Bay",
+        "auto_renew_cycle": date(2025, 12, 1),
+        "posted_streets": ["Beacon Street", "Commonwealth Avenue"],
+        "notes": "High demand area",
+        "source_url": "https://www.boston.gov/departments/parking-clerk",
+        "last_verified": date(2025, 11, 9),
+        "confidence": "high",
+        "created_at": datetime(2025, 11, 9, 12, 0, 0),
+        "updated_at": datetime(2025, 11, 9, 12, 0, 0),
+    }
+
+    nbrhd_2 = {
+        "nbrhd_id": "south_end",
+        "name": "South End",
+        "auto_renew_cycle": date(2025, 12, 1),
+        "posted_streets": ["Tremont Street", "Columbus Avenue"],
+        "notes": None,
+        "source_url": "https://www.boston.gov/departments/parking-clerk",
+        "last_verified": date(2025, 11, 9),
+        "confidence": "high",
+        "created_at": datetime(2025, 11, 9, 12, 0, 0),
+        "updated_at": datetime(2025, 11, 9, 12, 0, 0),
+    }
+
+    mock_session = AsyncMock()
+    mock_result = AsyncMock()
+    mock_result.data = AsyncMock(return_value=[{"n": nbrhd_1}, {"n": nbrhd_2}])
+    mock_session.run = AsyncMock(return_value=mock_result)
+    mock_neo4j_client.get_session.return_value.__aenter__.return_value = mock_session
+
+    # Execute
+    neighborhoods = await graph_service.get_process_neighborhoods("boston_resident_parking_permit")
+
+    # Assert
+    assert isinstance(neighborhoods, list)
+    assert len(neighborhoods) == 2
+    assert all(isinstance(n, RPPNeighborhood) for n in neighborhoods)
+    assert neighborhoods[0].nbrhd_id == "back_bay"
+    assert neighborhoods[1].nbrhd_id == "south_end"
+    assert neighborhoods[0].posted_streets == ["Beacon Street", "Commonwealth Avenue"]
+
+
+@pytest.mark.asyncio
+async def test_get_requirement_document_types(graph_service, mock_neo4j_client):
+    """Test retrieval of document types that satisfy a requirement."""
+    # Mock the session and result
+    mock_session = AsyncMock()
+    mock_result = AsyncMock()
+
+    # Sample document type data
+    sample_doc_type_data = {
+        "doc_type_id": "proof.utility_bill",
+        "name": "Utility Bill",
+        "freshness_days": 30,
+        "name_match_required": True,
+        "address_match_required": True,
+        "examples": ["National Grid", "Eversource"],
+        "source_url": "https://www.boston.gov/departments/parking-clerk/how-get-resident-parking-permit",
+        "last_verified": date(2025, 11, 9),
+        "confidence": "high",
+        "created_at": datetime(2025, 11, 9, 12, 0, 0),
+        "updated_at": datetime(2025, 11, 9, 12, 0, 0),
+    }
+
+    mock_result.data = AsyncMock(return_value=[{"dt": sample_doc_type_data}])
+    mock_session.run = AsyncMock(return_value=mock_result)
+    mock_neo4j_client.get_session.return_value.__aenter__.return_value = mock_session
+
+    # Execute
+    doc_types = await graph_service.get_requirement_document_types("req_proof_of_residency")
+
+    # Assert
+    assert isinstance(doc_types, list)
+    assert len(doc_types) == 1
+    assert isinstance(doc_types[0], DocumentType)
+    assert doc_types[0].doc_type_id == "proof.utility_bill"
+    assert doc_types[0].name == "Utility Bill"
+    assert doc_types[0].freshness_days == 30
+    assert doc_types[0].name_match_required is True
+    assert doc_types[0].address_match_required is True
+
+
+# ==================== Input Validation Tests ====================
+
+
+@pytest.mark.parametrize(
+    "invalid_id",
+    [
+        "",  # Empty string
+        "   ",  # Whitespace only
+        "'; DROP TABLE processes; --",  # SQL injection attempt
+        "<script>alert('xss')</script>",  # XSS attempt
+    ],
+)
+@pytest.mark.asyncio
+async def test_get_process_by_id_with_invalid_input(graph_service, mock_neo4j_client, invalid_id):
+    """Test that invalid inputs are handled gracefully."""
+    # Mock setup
+    mock_session = AsyncMock()
+    mock_result = AsyncMock()
+    mock_result.data = AsyncMock(return_value=[])  # No results
+    mock_session.run = AsyncMock(return_value=mock_result)
+    mock_neo4j_client.get_session.return_value.__aenter__.return_value = mock_session
+
+    # Execute
+    process = await graph_service.get_process_by_id(invalid_id)
+
+    # Assert - should return None (not found) without errors
+    # The service uses parameterized queries so injection attempts are safe
+    assert process is None
+
+    # Verify the query was still executed (parameterized, so safe)
+    mock_session.run.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "invalid_id",
+    [
+        "",  # Empty string
+        "   ",  # Whitespace only
+        "'; DROP TABLE steps; --",  # SQL injection attempt
+    ],
+)
+@pytest.mark.asyncio
+async def test_get_step_by_id_with_invalid_input(graph_service, mock_neo4j_client, invalid_id):
+    """Test that invalid inputs are handled gracefully for step queries."""
+    mock_session = AsyncMock()
+    mock_result = AsyncMock()
+    mock_result.data = AsyncMock(return_value=[])
+    mock_session.run = AsyncMock(return_value=mock_result)
+    mock_neo4j_client.get_session.return_value.__aenter__.return_value = mock_session
+
+    # Execute
+    step = await graph_service.get_step_by_id(invalid_id)
+
+    # Assert
+    assert step is None
+    mock_session.run.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "invalid_id",
+    [
+        "",
+        "   ",
+        "<img src=x onerror=alert(1)>",
+    ],
+)
+@pytest.mark.asyncio
+async def test_get_requirement_by_id_with_invalid_input(
+    graph_service, mock_neo4j_client, invalid_id
+):
+    """Test that invalid inputs are handled gracefully for requirement queries."""
+    mock_session = AsyncMock()
+    mock_result = AsyncMock()
+    mock_result.data = AsyncMock(return_value=[])
+    mock_session.run = AsyncMock(return_value=mock_result)
+    mock_neo4j_client.get_session.return_value.__aenter__.return_value = mock_session
+
+    # Execute
+    requirement = await graph_service.get_requirement_by_id(invalid_id)
+
+    # Assert
+    assert requirement is None
+    mock_session.run.assert_called_once()
+
+
+# ==================== Query Verification Tests ====================
+
+
+@pytest.mark.asyncio
+async def test_get_process_by_id_query_verification(
+    graph_service, mock_neo4j_client, sample_process_data
+):
+    """Test that correct Cypher query is executed with correct parameters."""
+    # Mock setup
+    mock_session = AsyncMock()
+    mock_result = AsyncMock()
+
+    mock_result.data = AsyncMock(return_value=[{"p": sample_process_data}])
+    mock_session.run = AsyncMock(return_value=mock_result)
+    mock_neo4j_client.get_session.return_value.__aenter__.return_value = mock_session
+
+    # Execute
+    await graph_service.get_process_by_id("test_process")
+
+    # Verify mock was called
+    mock_session.run.assert_called_once()
+
+    # Verify query parameters
+    call_args = mock_session.run.call_args
+    query = call_args[0][0]  # First positional argument
+    params = call_args[0][1]  # Second positional argument
+
+    # Verify the query contains expected patterns
+    assert "MATCH" in query
+    assert "Process" in query
+    assert "process_id" in query
+
+    # Verify parameters are passed correctly
+    assert params == {"process_id": "test_process"}
+
+
+@pytest.mark.asyncio
+async def test_get_process_steps_query_verification(
+    graph_service, mock_neo4j_client, sample_step_data
+):
+    """Test that correct Cypher query is executed for process steps."""
+    mock_session = AsyncMock()
+    mock_result = AsyncMock()
+    mock_result.data = AsyncMock(return_value=[{"s": sample_step_data}])
+    mock_session.run = AsyncMock(return_value=mock_result)
+    mock_neo4j_client.get_session.return_value.__aenter__.return_value = mock_session
+
+    # Execute
+    await graph_service.get_process_steps("test_process")
+
+    # Verify mock was called
+    mock_session.run.assert_called_once()
+
+    # Verify query
+    call_args = mock_session.run.call_args
+    query = call_args[0][0]
+    params = call_args[0][1]
+
+    # Verify query structure
+    assert "MATCH" in query
+    assert "HAS_STEP" in query
+    assert "ORDER BY" in query
+    assert params == {"process_id": "test_process"}
+
+
+@pytest.mark.asyncio
+async def test_get_requirement_document_types_query_verification(graph_service, mock_neo4j_client):
+    """Test that correct Cypher query is executed for requirement document types."""
+    doc_type_data = {
+        "doc_type_id": "proof.utility_bill",
+        "name": "Utility Bill",
+        "freshness_days": 30,
+        "name_match_required": True,
+        "address_match_required": True,
+        "examples": [],
+        "source_url": "https://example.com",
+        "last_verified": date(2025, 11, 9),
+        "confidence": "high",
+        "created_at": datetime(2025, 11, 9, 12, 0, 0),
+        "updated_at": datetime(2025, 11, 9, 12, 0, 0),
+    }
+
+    mock_session = AsyncMock()
+    mock_result = AsyncMock()
+    mock_result.data = AsyncMock(return_value=[{"dt": doc_type_data}])
+    mock_session.run = AsyncMock(return_value=mock_result)
+    mock_neo4j_client.get_session.return_value.__aenter__.return_value = mock_session
+
+    # Execute
+    await graph_service.get_requirement_document_types("req_residency")
+
+    # Verify mock was called
+    mock_session.run.assert_called_once()
+
+    # Verify query
+    call_args = mock_session.run.call_args
+    query = call_args[0][0]
+    params = call_args[0][1]
+
+    # Verify query structure
+    assert "MATCH" in query
+    assert "SATISFIES" in query
+    assert "Requirement" in query
+    assert params == {"requirement_id": "req_residency"}
+
+
+# ==================== Data Conversion Tests ====================
+
+
+def test_node_to_dict_with_none(graph_service):
+    """Test that _node_to_dict handles None gracefully."""
+    result = graph_service._node_to_dict(None)
+    assert result == {}
+
+
+def test_node_to_dict_with_dict():
+    """Test that _node_to_dict converts node-like objects to dicts."""
+    # Create a mock Neo4j node with dict behavior
+    mock_node = {"key": "value", "number": 123}
+    service = GraphService(MagicMock(spec=Neo4jClient))
+
+    result = service._node_to_dict(mock_node)
+    assert isinstance(result, dict)
+    assert "key" in result
+
+
+def test_convert_neo4j_types_with_native_types():
+    """Test conversion of Neo4j types to Python types."""
+    service = GraphService(MagicMock(spec=Neo4jClient))
+
+    # Test with standard Python types
+    data = {
+        "string": "test",
+        "number": 123,
+        "date": date(2025, 11, 9),
+        "datetime": datetime(2025, 11, 9, 12, 0, 0),
+        "bool": True,
+    }
+
+    result = service._convert_neo4j_types(data)
+
+    assert result["string"] == "test"
+    assert result["number"] == 123
+    assert result["date"] == date(2025, 11, 9)
+    assert result["datetime"] == datetime(2025, 11, 9, 12, 0, 0)
+    assert result["bool"] is True
+
+
+def test_convert_neo4j_types_with_to_native():
+    """Test conversion of objects with to_native method."""
+    service = GraphService(MagicMock(spec=Neo4jClient))
+
+    # Create a mock Neo4j object with to_native method
+    class MockNeo4jDate:
+        def to_native(self):
+            return date(2025, 11, 9)
+
+    data = {"neo4j_date": MockNeo4jDate()}
+    result = service._convert_neo4j_types(data)
+
+    assert result["neo4j_date"] == date(2025, 11, 9)
+
+
+# ==================== Empty Result Tests ====================
+
+
+@pytest.mark.asyncio
+async def test_get_step_dependencies_empty_result(graph_service, mock_neo4j_client):
+    """Test retrieval of step dependencies when there are none."""
+    mock_session = AsyncMock()
+    mock_result = AsyncMock()
+    mock_result.data = AsyncMock(return_value=[])
+    mock_session.run = AsyncMock(return_value=mock_result)
+    mock_neo4j_client.get_session.return_value.__aenter__.return_value = mock_session
+
+    # Execute
+    dependencies = await graph_service.get_step_dependencies("step_with_no_deps")
+
+    # Assert
+    assert isinstance(dependencies, list)
+    assert len(dependencies) == 0
+
+
+@pytest.mark.asyncio
+async def test_get_process_neighborhoods_empty_result(graph_service, mock_neo4j_client):
+    """Test retrieval of neighborhoods when process has none."""
+    mock_session = AsyncMock()
+    mock_result = AsyncMock()
+    mock_result.data = AsyncMock(return_value=[])
+    mock_session.run = AsyncMock(return_value=mock_result)
+    mock_neo4j_client.get_session.return_value.__aenter__.return_value = mock_session
+
+    # Execute
+    neighborhoods = await graph_service.get_process_neighborhoods("process_no_neighborhoods")
+
+    # Assert
+    assert isinstance(neighborhoods, list)
+    assert len(neighborhoods) == 0
+
+
+@pytest.mark.asyncio
+async def test_get_requirement_document_types_empty_result(graph_service, mock_neo4j_client):
+    """Test retrieval of document types when requirement has none."""
+    mock_session = AsyncMock()
+    mock_result = AsyncMock()
+    mock_result.data = AsyncMock(return_value=[])
+    mock_session.run = AsyncMock(return_value=mock_result)
+    mock_neo4j_client.get_session.return_value.__aenter__.return_value = mock_session
+
+    # Execute
+    doc_types = await graph_service.get_requirement_document_types("req_no_docs")
+
+    # Assert
+    assert isinstance(doc_types, list)
+    assert len(doc_types) == 0

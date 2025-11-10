@@ -27,7 +27,7 @@ import logging
 from datetime import date, datetime
 from typing import Any
 
-from neo4j.exceptions import Neo4jError
+from neo4j.exceptions import Neo4jError, ServiceUnavailable
 
 from src.db.graph.client import Neo4jClient
 from src.schemas.graph import (
@@ -103,6 +103,9 @@ class GraphService:
                 result = await session.run(query, parameters or {})
                 records = await result.data()
                 return records
+        except ServiceUnavailable as e:
+            logger.error(f"Neo4j connection error: {e}")
+            raise ConnectionError(f"Database connection failed: {e}") from e
         except Neo4jError as e:
             logger.error(f"Neo4j error executing query: {e}")
             raise GraphServiceError(f"Database error: {e}") from e
