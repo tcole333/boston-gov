@@ -73,7 +73,7 @@ Custom agents are defined in `/.claude/agents/`. Invoke with `@agent-name` in co
 - **Python 3.11+**, **FastAPI**
 - **Neo4j** (regulatory process graph)
 - **PostgreSQL + pgvector** (embeddings for RAG over regulations)
-- **Orchestration**: LangGraph (multi‑step agents)
+- **LLM Integration**: Anthropic Claude SDK with native tool calling (multi-step agents)
 - **Queue**: Celery + Redis (async doc processing)
 
 ### Frontend

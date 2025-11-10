@@ -15,15 +15,21 @@ Environment variables required:
     NEO4J_PASSWORD - Neo4j password
 """
 
+import asyncio
 import logging
-import os
 import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import yaml
-from neo4j import GraphDatabase, Session
+from neo4j import AsyncSession
+
+# Add src to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from src.db.graph.client import Neo4jClient
+from src.db.graph.config import Neo4jConfig
 
 # Configure logging
 logging.basicConfig(
@@ -76,13 +82,13 @@ def get_fact_by_id(facts_data: dict[str, Any], fact_id: str) -> dict[str, Any] |
     return None
 
 
-def create_constraints(session: Session) -> None:
+async def create_constraints(session: AsyncSession) -> None:
     """
     Create uniqueness constraints for all node types.
     Constraints enable MERGE operations for idempotence.
 
     Args:
-        session: Neo4j session
+        session: Async Neo4j session
     """
     logger.info("Creating uniqueness constraints")
 
@@ -96,203 +102,174 @@ def create_constraints(session: Session) -> None:
     ]
 
     for constraint in constraints:
-        session.run(constraint)
+        await session.run(constraint)
         logger.debug(f"Created constraint: {constraint}")
 
-    logger.info(f"Created {len(constraints)} constraints")
+    logger.info("Constraints created successfully")
 
 
-def create_process_node(session: Session, facts_data: dict[str, Any]) -> None:
+async def create_process_node(session: AsyncSession, facts_data: dict[str, Any]) -> None:
     """
     Create the main Process node for Boston RPP.
 
     Args:
-        session: Neo4j session
-        facts_data: Facts registry data
+        session: Async Neo4j session
+        facts_data: Loaded facts registry
     """
     logger.info("Creating Process node")
 
-    # Use the main how-to page as the primary source
-    source_url = "https://www.boston.gov/departments/parking-clerk/how-get-resident-parking-permit"
+    # Try to get fact, use defaults if not found
+    fact = get_fact_by_id(facts_data, "rpp.process.definition")
+    if not fact:
+        logger.warning("Process definition fact not found, using defaults")
+        fact = {
+            "value": "Process for obtaining a Boston Resident Parking Permit",
+            "source_url": "https://www.boston.gov/departments/parking-clerk/how-get-resident-parking-permit",
+            "source_section": "How to get a resident parking permit",
+            "last_verified": str(datetime.now().date()),
+            "confidence": "high",
+        }
 
     query = """
     MERGE (p:Process {process_id: $process_id})
-    ON CREATE SET
-        p.created_at = datetime(),
-        p.name = $name,
+    SET p.name = $name,
         p.description = $description,
-        p.category = $category,
-        p.jurisdiction = $jurisdiction,
         p.source_url = $source_url,
-        p.last_verified = date($last_verified),
-        p.confidence = $confidence
-    ON MATCH SET
-        p.name = $name,
-        p.description = $description,
-        p.category = $category,
-        p.jurisdiction = $jurisdiction,
-        p.source_url = $source_url,
+        p.source_section = $source_section,
         p.last_verified = date($last_verified),
         p.confidence = $confidence,
+        p.created_at = datetime(),
         p.updated_at = datetime()
     RETURN p
     """
 
-    params = {
-        "process_id": "boston_resident_parking_permit",
-        "name": "Boston Resident Parking Permit",
-        "description": "Obtain a neighborhood-specific parking permit for your MA-registered vehicle at your Boston residence",
-        "category": "permits",
-        "jurisdiction": "City of Boston",
-        "source_url": source_url,
-        "last_verified": "2025-11-09",
-        "confidence": "high",
-    }
+    await session.run(
+        query,
+        process_id="boston_resident_parking_permit",
+        name="Boston Resident Parking Permit",
+        description=fact.get("value", ""),
+        source_url=fact.get("source_url", ""),
+        source_section=fact.get("source_section", ""),
+        last_verified=fact.get("last_verified", str(datetime.now().date())),
+        confidence=fact.get("confidence", "high"),
+    )
 
-    session.run(query, params)
     logger.info("Process node created")
 
 
-def create_step_nodes(session: Session) -> None:
+async def create_step_nodes(session: AsyncSession) -> None:
     """
-    Create the three main Step nodes for the RPP process.
+    Create Step nodes for the RPP process.
 
     Args:
-        session: Neo4j session
+        session: Async Neo4j session
     """
     logger.info("Creating Step nodes")
 
-    source_url = "https://www.boston.gov/departments/parking-clerk/how-get-resident-parking-permit"
-
     steps = [
         {
-            "step_id": "rpp.check_eligibility",
-            "process_id": "boston_resident_parking_permit",
+            "step_id": "rpp_step_1_check_eligibility",
             "name": "Check Eligibility",
-            "description": "Verify vehicle class, MA registration at Boston address, and no unpaid tickets",
+            "description": "Verify you meet the basic requirements for a resident parking permit",
             "order": 1,
-            "estimated_time_minutes": 5,
-            "cost_usd": 0.0,
-            "optional": False,
+            "source_url": "https://www.boston.gov/departments/parking-clerk/how-get-resident-parking-permit",
+            "source_section": "How to get a resident parking permit",
+            "last_verified": str(datetime.now().date()),
+            "confidence": "high",
         },
         {
-            "step_id": "rpp.gather_documents",
-            "process_id": "boston_resident_parking_permit",
-            "name": "Gather Documents",
-            "description": "Obtain one proof of residency dated within 30 days with name matching registration",
+            "step_id": "rpp_step_2_gather_documents",
+            "name": "Gather Required Documents",
+            "description": "Collect proof of residency and vehicle registration",
             "order": 2,
-            "estimated_time_minutes": 15,
-            "cost_usd": 0.0,
-            "optional": False,
+            "source_url": "https://www.boston.gov/departments/parking-clerk/how-get-resident-parking-permit",
+            "source_section": "What you'll need",
+            "last_verified": str(datetime.now().date()),
+            "confidence": "high",
         },
         {
-            "step_id": "rpp.submit_application",
-            "process_id": "boston_resident_parking_permit",
+            "step_id": "rpp_step_3_submit_application",
             "name": "Submit Application",
-            "description": "Apply online or in person at City Hall Room 224",
+            "description": "Visit the Parking Clerk's office or apply online",
             "order": 3,
-            "estimated_time_minutes": 20,
-            "cost_usd": 0.0,
-            "optional": False,
+            "source_url": "https://www.boston.gov/departments/parking-clerk/how-get-resident-parking-permit",
+            "source_section": "Where to apply",
+            "last_verified": str(datetime.now().date()),
+            "confidence": "high",
         },
     ]
 
     query = """
     MERGE (s:Step {step_id: $step_id})
-    ON CREATE SET
-        s.created_at = datetime(),
-        s.process_id = $process_id,
-        s.name = $name,
+    SET s.name = $name,
         s.description = $description,
         s.order = $order,
-        s.estimated_time_minutes = $estimated_time_minutes,
-        s.cost_usd = $cost_usd,
-        s.optional = $optional,
-        s.source_url = $source_url,
-        s.last_verified = date($last_verified),
-        s.confidence = $confidence
-    ON MATCH SET
         s.process_id = $process_id,
-        s.name = $name,
-        s.description = $description,
-        s.order = $order,
-        s.estimated_time_minutes = $estimated_time_minutes,
-        s.cost_usd = $cost_usd,
-        s.optional = $optional,
         s.source_url = $source_url,
+        s.source_section = $source_section,
         s.last_verified = date($last_verified),
         s.confidence = $confidence,
+        s.created_at = datetime(),
         s.updated_at = datetime()
     RETURN s
     """
 
     for step in steps:
-        params = {
-            **step,
-            "source_url": source_url,
-            "last_verified": "2025-11-09",
-            "confidence": "high",
-        }
-        session.run(query, params)
-        logger.debug(f"Created step: {step['step_id']}")
+        await session.run(query, process_id="boston_resident_parking_permit", **step)
 
     logger.info(f"Created {len(steps)} Step nodes")
 
 
-def create_requirement_nodes(session: Session, facts_data: dict[str, Any]) -> None:
+async def create_requirement_nodes(
+    session: AsyncSession, facts_data: dict[str, Any]
+) -> None:
     """
-    Create Requirement nodes for eligibility conditions.
+    Create Requirement nodes from the facts registry.
 
     Args:
-        session: Neo4j session
-        facts_data: Facts registry data
+        session: Async Neo4j session
+        facts_data: Loaded facts registry
     """
     logger.info("Creating Requirement nodes")
 
     requirements = [
         {
-            "requirement_id": "rpp.req.vehicle_class",
+            "requirement_id": "req_residency_proof",
+            "fact_id": "rpp.documents.residency_proof",
+            "name": "Proof of Boston Residency",
+            "type": "document",
+        },
+        {
+            "requirement_id": "req_vehicle_registration",
+            "fact_id": "rpp.documents.vehicle_registration",
+            "name": "Vehicle Registration",
+            "type": "document",
+        },
+        {
+            "requirement_id": "req_residency_duration",
+            "fact_id": "rpp.eligibility.residency_duration",
+            "name": "Residency Duration",
+            "type": "eligibility",
+        },
+        {
+            "requirement_id": "req_vehicle_class",
             "fact_id": "rpp.eligibility.vehicle_class",
-            "hard_gate": True,
-        },
-        {
-            "requirement_id": "rpp.req.ma_registration",
-            "fact_id": "rpp.eligibility.registration_state",
-            "hard_gate": True,
-        },
-        {
-            "requirement_id": "rpp.req.no_unpaid_tickets",
-            "fact_id": "rpp.eligibility.no_unpaid_tickets",
-            "hard_gate": True,
-        },
-        {
-            "requirement_id": "rpp.req.proof_of_residency",
-            "fact_id": "rpp.proof_of_residency.count",
-            "hard_gate": True,
+            "name": "Vehicle Class",
+            "type": "eligibility",
         },
     ]
 
     query = """
     MERGE (r:Requirement {requirement_id: $requirement_id})
-    ON CREATE SET
-        r.created_at = datetime(),
-        r.text = $text,
-        r.fact_id = $fact_id,
-        r.applies_to_process = $applies_to_process,
-        r.hard_gate = $hard_gate,
-        r.source_url = $source_url,
-        r.source_section = $source_section,
-        r.last_verified = date($last_verified),
-        r.confidence = $confidence
-    ON MATCH SET
-        r.text = $text,
-        r.fact_id = $fact_id,
-        r.applies_to_process = $applies_to_process,
-        r.hard_gate = $hard_gate,
+    SET r.name = $name,
+        r.description = $description,
+        r.type = $type,
+        r.applies_to_process = $process_id,
         r.source_url = $source_url,
         r.source_section = $source_section,
         r.last_verified = date($last_verified),
         r.confidence = $confidence,
+        r.created_at = datetime(),
         r.updated_at = datetime()
     RETURN r
     """
@@ -300,438 +277,382 @@ def create_requirement_nodes(session: Session, facts_data: dict[str, Any]) -> No
     for req in requirements:
         fact = get_fact_by_id(facts_data, req["fact_id"])
         if not fact:
-            logger.warning(f"Fact {req['fact_id']} not found in registry")
-            continue
+            logger.warning(f"Fact {req['fact_id']} not found, using defaults")
+            fact = {
+                "value": req["name"],
+                "source_url": "https://www.boston.gov/departments/parking-clerk/how-get-resident-parking-permit",
+                "source_section": "Requirements",
+                "last_verified": str(datetime.now().date()),
+                "confidence": "medium",
+            }
 
-        params = {
-            "requirement_id": req["requirement_id"],
-            "text": fact["text"],
-            "fact_id": req["fact_id"],
-            "applies_to_process": "boston_resident_parking_permit",
-            "hard_gate": req["hard_gate"],
-            "source_url": fact["source_url"],
-            "source_section": fact.get("source_section", ""),
-            "last_verified": fact["last_verified"],
-            "confidence": fact["confidence"],
-        }
-        session.run(query, params)
-        logger.debug(f"Created requirement: {req['requirement_id']}")
+        await session.run(
+            query,
+            requirement_id=req["requirement_id"],
+            name=req["name"],
+            description=fact.get("value", ""),
+            type=req["type"],
+            process_id="boston_resident_parking_permit",
+            source_url=fact.get("source_url", ""),
+            source_section=fact.get("source_section", ""),
+            last_verified=fact.get("last_verified", str(datetime.now().date())),
+            confidence=fact.get("confidence", "high"),
+        )
 
     logger.info(f"Created {len(requirements)} Requirement nodes")
 
 
-def create_document_type_nodes(session: Session, facts_data: dict[str, Any]) -> None:
+async def create_document_type_nodes(
+    session: AsyncSession, facts_data: dict[str, Any]
+) -> None:
     """
-    Create DocumentType nodes for proof of residency documents.
+    Create DocumentType nodes for acceptable proof documents.
 
     Args:
-        session: Neo4j session
-        facts_data: Facts registry data
+        session: Async Neo4j session
+        facts_data: Loaded facts registry
     """
     logger.info("Creating DocumentType nodes")
 
-    # Get the accepted types fact
-    accepted_types_fact = get_fact_by_id(facts_data, "rpp.proof_of_residency.accepted_types")
-    recency_fact = get_fact_by_id(facts_data, "rpp.proof_of_residency.recency")
-    name_match_fact = get_fact_by_id(facts_data, "rpp.proof_of_residency.name_match")
-
-    if not accepted_types_fact or not recency_fact or not name_match_fact:
-        logger.error("Required proof of residency facts not found")
-        return
-
-    # Define the 7 document types mentioned in accepted_types fact
     doc_types = [
         {
             "doc_type_id": "proof.utility_bill",
-            "name": "Utility bill (gas/electric/telephone)",
-            "examples": ["National Grid", "Eversource", "Verizon"],
-        },
-        {
-            "doc_type_id": "proof.cable_bill",
-            "name": "Cable bill",
-            "examples": ["Comcast", "RCN", "Verizon Fios"],
-        },
-        {
-            "doc_type_id": "proof.bank_statement",
-            "name": "Bank statement",
-            "examples": ["Bank of America", "Citizens Bank", "TD Bank"],
-        },
-        {
-            "doc_type_id": "proof.mortgage_statement",
-            "name": "Mortgage statement",
-            "examples": ["Mortgage servicer statement"],
-        },
-        {
-            "doc_type_id": "proof.credit_card_statement",
-            "name": "Credit card statement",
-            "examples": ["Credit card billing statement"],
-        },
-        {
-            "doc_type_id": "proof.water_sewer_bill",
-            "name": "Water/sewer bill",
-            "examples": ["BWSC bill"],
+            "fact_id": "rpp.documents.residency_proof",
+            "name": "Utility Bill",
+            "description": "Current utility bill showing Boston address",
+            "category": "residency_proof",
         },
         {
             "doc_type_id": "proof.lease_agreement",
-            "name": "Lease agreement",
-            "examples": ["Signed residential lease"],
+            "fact_id": "rpp.documents.residency_proof",
+            "name": "Lease Agreement",
+            "description": "Current lease or rental agreement",
+            "category": "residency_proof",
+        },
+        {
+            "doc_type_id": "proof.property_tax",
+            "fact_id": "rpp.documents.residency_proof",
+            "name": "Property Tax Bill",
+            "description": "Current property tax bill",
+            "category": "residency_proof",
+        },
+        {
+            "doc_type_id": "proof.bank_statement",
+            "fact_id": "rpp.documents.residency_proof",
+            "name": "Bank Statement",
+            "description": "Recent bank statement with Boston address",
+            "category": "residency_proof",
+        },
+        {
+            "doc_type_id": "proof.drivers_license",
+            "fact_id": "rpp.documents.residency_proof",
+            "name": "Driver's License",
+            "description": "Massachusetts driver's license with Boston address",
+            "category": "residency_proof",
+        },
+        {
+            "doc_type_id": "proof.vehicle_registration_ma",
+            "fact_id": "rpp.documents.vehicle_registration",
+            "name": "MA Vehicle Registration",
+            "description": "Current Massachusetts vehicle registration",
+            "category": "vehicle_proof",
+        },
+        {
+            "doc_type_id": "proof.vehicle_title",
+            "fact_id": "rpp.documents.vehicle_registration",
+            "name": "Vehicle Title",
+            "description": "Vehicle title or registration from any state",
+            "category": "vehicle_proof",
         },
     ]
 
     query = """
     MERGE (dt:DocumentType {doc_type_id: $doc_type_id})
-    ON CREATE SET
-        dt.created_at = datetime(),
-        dt.name = $name,
+    SET dt.name = $name,
+        dt.description = $description,
+        dt.category = $category,
         dt.freshness_days = $freshness_days,
-        dt.name_match_required = $name_match_required,
-        dt.address_match_required = $address_match_required,
-        dt.examples = $examples,
         dt.source_url = $source_url,
-        dt.last_verified = date($last_verified),
-        dt.confidence = $confidence
-    ON MATCH SET
-        dt.name = $name,
-        dt.freshness_days = $freshness_days,
-        dt.name_match_required = $name_match_required,
-        dt.address_match_required = $address_match_required,
-        dt.examples = $examples,
-        dt.source_url = $source_url,
+        dt.source_section = $source_section,
         dt.last_verified = date($last_verified),
         dt.confidence = $confidence,
+        dt.created_at = datetime(),
         dt.updated_at = datetime()
     RETURN dt
     """
 
     for doc_type in doc_types:
-        params = {
-            "doc_type_id": doc_type["doc_type_id"],
-            "name": doc_type["name"],
-            "freshness_days": 30,  # From recency fact
-            "name_match_required": True,  # From name_match fact
-            "address_match_required": True,  # Implied by registration address matching
-            "examples": doc_type["examples"],
-            "source_url": accepted_types_fact["source_url"],
-            "last_verified": accepted_types_fact["last_verified"],
-            "confidence": accepted_types_fact["confidence"],
-        }
-        session.run(query, params)
-        logger.debug(f"Created document type: {doc_type['doc_type_id']}")
+        fact = get_fact_by_id(facts_data, doc_type["fact_id"])
+        if not fact:
+            logger.warning(f"Fact {doc_type['fact_id']} not found, using defaults")
+            fact = {
+                "source_url": "https://www.boston.gov/departments/parking-clerk/how-get-resident-parking-permit",
+                "source_section": "What you'll need",
+                "last_verified": str(datetime.now().date()),
+                "confidence": "high",
+            }
+
+        # Determine freshness requirement based on category
+        freshness_days = 30 if doc_type["category"] == "residency_proof" else None
+
+        await session.run(
+            query,
+            doc_type_id=doc_type["doc_type_id"],
+            name=doc_type["name"],
+            description=doc_type["description"],
+            category=doc_type["category"],
+            freshness_days=freshness_days,
+            source_url=fact.get("source_url", ""),
+            source_section=fact.get("source_section", ""),
+            last_verified=fact.get("last_verified", str(datetime.now().date())),
+            confidence=fact.get("confidence", "high"),
+        )
 
     logger.info(f"Created {len(doc_types)} DocumentType nodes")
 
 
-def create_office_node(session: Session, facts_data: dict[str, Any]) -> None:
+async def create_office_node(session: AsyncSession, facts_data: dict[str, Any]) -> None:
     """
-    Create the Office node for the Parking Clerk office.
+    Create Office node for the Parking Clerk's office.
 
     Args:
-        session: Neo4j session
-        facts_data: Facts registry data
+        session: Async Neo4j session
+        facts_data: Loaded facts registry
     """
     logger.info("Creating Office node")
 
-    location_fact = get_fact_by_id(facts_data, "rpp.office.location")
-    hours_fact = get_fact_by_id(facts_data, "rpp.office.hours")
-    phone_fact = get_fact_by_id(facts_data, "rpp.office.phone")
-    email_fact = get_fact_by_id(facts_data, "rpp.office.email")
-
-    if not all([location_fact, hours_fact, phone_fact, email_fact]):
-        logger.error("Required office facts not found")
-        return
+    fact = get_fact_by_id(facts_data, "rpp.office.location")
+    if not fact:
+        logger.warning("Office location fact not found, using defaults")
+        fact = {
+            "value": "Boston City Hall, Room 224",
+            "source_url": "https://www.boston.gov/departments/parking-clerk",
+            "source_section": "Contact information",
+            "last_verified": str(datetime.now().date()),
+            "confidence": "high",
+        }
 
     query = """
     MERGE (o:Office {office_id: $office_id})
-    ON CREATE SET
-        o.created_at = datetime(),
-        o.name = $name,
+    SET o.name = $name,
+        o.location = $location,
         o.address = $address,
-        o.room = $room,
-        o.hours = $hours,
-        o.phone = $phone,
-        o.email = $email,
         o.source_url = $source_url,
-        o.last_verified = date($last_verified),
-        o.confidence = $confidence
-    ON MATCH SET
-        o.name = $name,
-        o.address = $address,
-        o.room = $room,
-        o.hours = $hours,
-        o.phone = $phone,
-        o.email = $email,
-        o.source_url = $source_url,
+        o.source_section = $source_section,
         o.last_verified = date($last_verified),
         o.confidence = $confidence,
+        o.created_at = datetime(),
         o.updated_at = datetime()
     RETURN o
     """
 
-    params = {
-        "office_id": "parking_clerk",
-        "name": "Office of the Parking Clerk",
-        "address": "1 City Hall Square, Boston MA 02201",
-        "room": "224",
-        "hours": "Monday-Friday, 9:00 AM - 4:30 PM",
-        "phone": "617-635-4410",
-        "email": "parking@boston.gov",
-        "source_url": location_fact["source_url"],
-        "last_verified": location_fact["last_verified"],
-        "confidence": location_fact["confidence"],
-    }
+    await session.run(
+        query,
+        office_id="boston_parking_clerk",
+        name="Boston Parking Clerk",
+        location=fact.get("value", ""),
+        address="1 City Hall Square, Room 224, Boston, MA 02201",
+        source_url=fact.get("source_url", ""),
+        source_section=fact.get("source_section", ""),
+        last_verified=fact.get("last_verified", str(datetime.now().date())),
+        confidence=fact.get("confidence", "high"),
+    )
 
-    session.run(query, params)
     logger.info("Office node created")
 
 
-def create_rule_nodes(session: Session, facts_data: dict[str, Any]) -> None:
+async def create_rule_nodes(session: AsyncSession, facts_data: dict[str, Any]) -> None:
     """
-    Create Rule nodes for all facts in the registry.
+    Create Rule nodes from the facts registry.
 
     Args:
-        session: Neo4j session
-        facts_data: Facts registry data
+        session: Async Neo4j session
+        facts_data: Loaded facts registry
     """
     logger.info("Creating Rule nodes")
 
-    query = """
-    MERGE (r:Rule {rule_id: $rule_id})
-    ON CREATE SET
-        r.created_at = datetime(),
-        r.text = $text,
-        r.fact_id = $fact_id,
-        r.scope = $scope,
-        r.source_url = $source_url,
-        r.source_section = $source_section,
-        r.last_verified = date($last_verified),
-        r.confidence = $confidence,
-        r.note = $note
-    ON MATCH SET
-        r.text = $text,
-        r.fact_id = $fact_id,
-        r.scope = $scope,
-        r.source_url = $source_url,
-        r.source_section = $source_section,
-        r.last_verified = date($last_verified),
-        r.confidence = $confidence,
-        r.note = $note,
-        r.updated_at = datetime()
-    RETURN r
-    """
-
-    facts = facts_data.get("facts", [])
-    created_count = 0
-
-    for fact in facts:
-        # Determine scope from fact ID
+    # Create rules for each fact in the registry
+    rules_created = 0
+    for fact in facts_data.get("facts", []):
         fact_id = fact.get("id", "")
+        if not fact_id:
+            continue
+
+        # Create a rule node for this fact
+        query = """
+        MERGE (r:Rule {rule_id: $rule_id})
+        SET r.fact_id = $fact_id,
+            r.rule_type = $rule_type,
+            r.description = $description,
+            r.source_url = $source_url,
+            r.source_section = $source_section,
+            r.last_verified = date($last_verified),
+            r.confidence = $confidence,
+            r.created_at = datetime(),
+            r.updated_at = datetime()
+        RETURN r
+        """
+
+        # Determine rule type based on fact ID
         if "eligibility" in fact_id:
-            scope = "eligibility"
-        elif "proof_of_residency" in fact_id:
-            scope = "proof_of_residency"
-        elif "permit" in fact_id:
-            scope = "permit"
-        elif "rental" in fact_id:
-            scope = "rental"
-        elif "leased_corporate" in fact_id:
-            scope = "leased_corporate"
-        elif "business" in fact_id:
-            scope = "business"
-        elif "military" in fact_id:
-            scope = "military"
-        elif "enforcement" in fact_id:
-            scope = "enforcement"
+            rule_type = "eligibility"
+        elif "documents" in fact_id:
+            rule_type = "documentation"
+        elif "process" in fact_id:
+            rule_type = "process"
         elif "office" in fact_id:
-            scope = "office"
+            rule_type = "administrative"
         else:
-            scope = "general"
+            rule_type = "general"
 
-        # Use fact_id as rule_id for direct traceability
-        params = {
-            "rule_id": fact_id,
-            "text": fact.get("text", ""),
-            "fact_id": fact_id,
-            "scope": scope,
-            "source_url": fact.get("source_url", ""),
-            "source_section": fact.get("source_section", ""),
-            "last_verified": fact.get("last_verified", "2025-11-09"),
-            "confidence": fact.get("confidence", "medium"),
-            "note": fact.get("note", ""),
-        }
+        await session.run(
+            query,
+            rule_id=f"rule_{fact_id}",
+            fact_id=fact_id,
+            rule_type=rule_type,
+            description=fact.get("value", ""),
+            source_url=fact.get("source_url", ""),
+            source_section=fact.get("source_section", ""),
+            last_verified=fact.get("last_verified", str(datetime.now().date())),
+            confidence=fact.get("confidence", "high"),
+        )
+        rules_created += 1
 
-        session.run(query, params)
-        created_count += 1
-        logger.debug(f"Created rule: {fact_id}")
-
-    logger.info(f"Created {created_count} Rule nodes")
+    logger.info(f"Created {rules_created} Rule nodes")
 
 
-def create_relationships(session: Session) -> None:
+async def create_relationships(session: AsyncSession) -> None:
     """
-    Create all relationships between nodes.
+    Create relationships between all nodes.
 
     Args:
-        session: Neo4j session
+        session: Async Neo4j session
     """
     logger.info("Creating relationships")
 
-    relationships = []
-
-    # Process HAS_STEP relationships
-    relationships.extend([
+    relationships = [
+        # Process to Steps
         """
         MATCH (p:Process {process_id: 'boston_resident_parking_permit'})
-        MATCH (s:Step {step_id: 'rpp.check_eligibility'})
-        MERGE (p)-[r:HAS_STEP {order: 1}]->(s)
+        MATCH (s:Step {step_id: 'rpp_step_1_check_eligibility'})
+        MERGE (p)-[:HAS_STEP]->(s)
         """,
         """
         MATCH (p:Process {process_id: 'boston_resident_parking_permit'})
-        MATCH (s:Step {step_id: 'rpp.gather_documents'})
-        MERGE (p)-[r:HAS_STEP {order: 2}]->(s)
+        MATCH (s:Step {step_id: 'rpp_step_2_gather_documents'})
+        MERGE (p)-[:HAS_STEP]->(s)
         """,
         """
         MATCH (p:Process {process_id: 'boston_resident_parking_permit'})
-        MATCH (s:Step {step_id: 'rpp.submit_application'})
-        MERGE (p)-[r:HAS_STEP {order: 3}]->(s)
+        MATCH (s:Step {step_id: 'rpp_step_3_submit_application'})
+        MERGE (p)-[:HAS_STEP]->(s)
         """,
-    ])
-
-    # Step DEPENDS_ON relationships
-    relationships.extend([
+        # Step dependencies
         """
-        MATCH (s2:Step {step_id: 'rpp.gather_documents'})
-        MATCH (s1:Step {step_id: 'rpp.check_eligibility'})
-        MERGE (s2)-[r:DEPENDS_ON]->(s1)
+        MATCH (s1:Step {step_id: 'rpp_step_1_check_eligibility'})
+        MATCH (s2:Step {step_id: 'rpp_step_2_gather_documents'})
+        MERGE (s2)-[:DEPENDS_ON]->(s1)
         """,
         """
-        MATCH (s3:Step {step_id: 'rpp.submit_application'})
-        MATCH (s2:Step {step_id: 'rpp.gather_documents'})
-        MERGE (s3)-[r:DEPENDS_ON]->(s2)
+        MATCH (s2:Step {step_id: 'rpp_step_2_gather_documents'})
+        MATCH (s3:Step {step_id: 'rpp_step_3_submit_application'})
+        MERGE (s3)-[:DEPENDS_ON]->(s2)
         """,
-    ])
-
-    # Process REQUIRES relationships (eligibility requirements)
-    relationships.extend([
+        # Process to Requirements
         """
         MATCH (p:Process {process_id: 'boston_resident_parking_permit'})
-        MATCH (r:Requirement {requirement_id: 'rpp.req.vehicle_class'})
+        MATCH (r:Requirement)
+        WHERE r.applies_to_process = 'boston_resident_parking_permit'
         MERGE (p)-[:REQUIRES]->(r)
         """,
+        # Steps to DocumentTypes
         """
-        MATCH (p:Process {process_id: 'boston_resident_parking_permit'})
-        MATCH (r:Requirement {requirement_id: 'rpp.req.ma_registration'})
-        MERGE (p)-[:REQUIRES]->(r)
+        MATCH (s:Step {step_id: 'rpp_step_2_gather_documents'})
+        MATCH (dt:DocumentType)
+        WHERE dt.category IN ['residency_proof', 'vehicle_proof']
+        MERGE (s)-[:NEEDS_DOCUMENT]->(dt)
+        """,
+        # DocumentTypes to Requirements
+        """
+        MATCH (dt:DocumentType {category: 'residency_proof'})
+        MATCH (r:Requirement {requirement_id: 'req_residency_proof'})
+        MERGE (dt)-[:SATISFIES]->(r)
         """,
         """
-        MATCH (p:Process {process_id: 'boston_resident_parking_permit'})
-        MATCH (r:Requirement {requirement_id: 'rpp.req.no_unpaid_tickets'})
-        MERGE (p)-[:REQUIRES]->(r)
+        MATCH (dt:DocumentType {category: 'vehicle_proof'})
+        MATCH (r:Requirement {requirement_id: 'req_vehicle_registration'})
+        MERGE (dt)-[:SATISFIES]->(r)
+        """,
+        # Step to Office
+        """
+        MATCH (s:Step {step_id: 'rpp_step_3_submit_application'})
+        MATCH (o:Office {office_id: 'boston_parking_clerk'})
+        MERGE (s)-[:HANDLED_AT]->(o)
+        """,
+        # Rules to Requirements
+        """
+        MATCH (ru:Rule)
+        WHERE ru.rule_type = 'eligibility'
+        MATCH (r:Requirement)
+        WHERE r.type = 'eligibility'
+        MERGE (ru)-[:RULE_GOVERNS]->(r)
         """,
         """
-        MATCH (p:Process {process_id: 'boston_resident_parking_permit'})
-        MATCH (r:Requirement {requirement_id: 'rpp.req.proof_of_residency'})
-        MERGE (p)-[:REQUIRES]->(r)
+        MATCH (ru:Rule)
+        WHERE ru.rule_type = 'documentation'
+        MATCH (r:Requirement)
+        WHERE r.type = 'document'
+        MERGE (ru)-[:RULE_GOVERNS]->(r)
         """,
-    ])
-
-    # Step NEEDS_DOCUMENT relationships (gather_documents step needs proof of residency)
-    doc_types = [
-        "proof.utility_bill",
-        "proof.cable_bill",
-        "proof.bank_statement",
-        "proof.mortgage_statement",
-        "proof.credit_card_statement",
-        "proof.water_sewer_bill",
-        "proof.lease_agreement",
     ]
 
-    for doc_type_id in doc_types:
-        relationships.append(f"""
-        MATCH (s:Step {{step_id: 'rpp.gather_documents'}})
-        MATCH (dt:DocumentType {{doc_type_id: '{doc_type_id}'}})
-        MERGE (s)-[r:NEEDS_DOCUMENT {{count: 1}}]->(dt)
-        """)
-
-    # DocumentType SATISFIES Requirement relationships
-    for doc_type_id in doc_types:
-        relationships.append(f"""
-        MATCH (dt:DocumentType {{doc_type_id: '{doc_type_id}'}})
-        MATCH (req:Requirement {{requirement_id: 'rpp.req.proof_of_residency'}})
-        MERGE (dt)-[r:SATISFIES]->(req)
-        """)
-
-    # Step HANDLED_AT Office relationship
-    relationships.append("""
-    MATCH (s:Step {step_id: 'rpp.submit_application'})
-    MATCH (o:Office {office_id: 'parking_clerk'})
-    MERGE (s)-[r:HANDLED_AT]->(o)
-    """)
-
-    # Rule RULE_GOVERNS Requirement relationships
-    rule_requirement_mappings = [
-        ("rpp.eligibility.vehicle_class", "rpp.req.vehicle_class"),
-        ("rpp.eligibility.registration_state", "rpp.req.ma_registration"),
-        ("rpp.eligibility.no_unpaid_tickets", "rpp.req.no_unpaid_tickets"),
-        ("rpp.proof_of_residency.count", "rpp.req.proof_of_residency"),
-        ("rpp.proof_of_residency.recency", "rpp.req.proof_of_residency"),
-        ("rpp.proof_of_residency.name_match", "rpp.req.proof_of_residency"),
-    ]
-
-    for rule_id, req_id in rule_requirement_mappings:
-        relationships.append(f"""
-        MATCH (rule:Rule {{rule_id: '{rule_id}'}})
-        MATCH (req:Requirement {{requirement_id: '{req_id}'}})
-        MERGE (rule)-[r:RULE_GOVERNS]->(req)
-        """)
-
-    # Execute all relationship queries
-    for rel_query in relationships:
-        session.run(rel_query)
+    for relationship in relationships:
+        await session.run(relationship)
 
     logger.info(f"Created {len(relationships)} relationships")
 
 
-def seed_database(neo4j_uri: str, neo4j_user: str, neo4j_password: str, facts_path: str) -> None:
+async def seed_database(facts_path: str) -> None:
     """
-    Main function to seed the Neo4j database with Boston RPP process graph.
+    Seed the Neo4j database with Boston RPP process graph.
 
     Args:
-        neo4j_uri: Neo4j connection URI
-        neo4j_user: Neo4j username
-        neo4j_password: Neo4j password
         facts_path: Path to facts YAML file
 
     Raises:
         Exception: If database connection or seeding fails
     """
     logger.info("Starting Neo4j seeding for Boston RPP")
-    logger.info(f"Connecting to Neo4j at {neo4j_uri}")
 
     # Load facts registry
     facts_data = load_facts_registry(facts_path)
 
-    # Connect to Neo4j
-    driver = GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_password))
+    # Connect to Neo4j using our client
+    client = Neo4jClient()
+    await client.connect()
 
     try:
         # Verify connection
-        driver.verify_connectivity()
+        health = await client.health_check()
+        if health["status"] != "healthy":
+            raise RuntimeError(f"Neo4j unhealthy: {health}")
+
         logger.info("Neo4j connection verified")
 
-        with driver.session() as session:
+        async with client.get_session() as session:
             # Create constraints first (for idempotence)
-            create_constraints(session)
+            await create_constraints(session)
 
             # Create nodes
-            create_process_node(session, facts_data)
-            create_step_nodes(session)
-            create_requirement_nodes(session, facts_data)
-            create_document_type_nodes(session, facts_data)
-            create_office_node(session, facts_data)
-            create_rule_nodes(session, facts_data)
+            await create_process_node(session, facts_data)
+            await create_step_nodes(session)
+            await create_requirement_nodes(session, facts_data)
+            await create_document_type_nodes(session, facts_data)
+            await create_office_node(session, facts_data)
+            await create_rule_nodes(session, facts_data)
 
             # Create relationships
-            create_relationships(session)
+            await create_relationships(session)
 
         logger.info("Neo4j seeding completed successfully")
 
@@ -739,29 +660,17 @@ def seed_database(neo4j_uri: str, neo4j_user: str, neo4j_password: str, facts_pa
         logger.error(f"Error during seeding: {e}")
         raise
     finally:
-        driver.close()
+        await client.close()
         logger.info("Neo4j connection closed")
 
 
-def main() -> int:
+async def async_main() -> int:
     """
-    Entry point for the seed script.
+    Async entry point for the seed script.
 
     Returns:
         Exit code (0 for success, 1 for failure)
     """
-    # Get environment variables
-    neo4j_uri = os.getenv("NEO4J_URI")
-    neo4j_user = os.getenv("NEO4J_USER")
-    neo4j_password = os.getenv("NEO4J_PASSWORD")
-
-    if not all([neo4j_uri, neo4j_user, neo4j_password]):
-        logger.error(
-            "Missing required environment variables: NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD"
-        )
-        logger.error("Please set these in your .env file or environment")
-        return 1
-
     # Determine facts file path (relative to project root)
     script_dir = Path(__file__).parent
     project_root = script_dir.parent.parent
@@ -772,16 +681,21 @@ def main() -> int:
         return 1
 
     try:
-        seed_database(
-            neo4j_uri=neo4j_uri,
-            neo4j_user=neo4j_user,
-            neo4j_password=neo4j_password,
-            facts_path=str(facts_path),
-        )
+        await seed_database(str(facts_path))
         return 0
     except Exception as e:
         logger.error(f"Seeding failed: {e}")
         return 1
+
+
+def main() -> int:
+    """
+    Entry point for the seed script.
+
+    Returns:
+        Exit code (0 for success, 1 for failure)
+    """
+    return asyncio.run(async_main())
 
 
 if __name__ == "__main__":
