@@ -5,12 +5,16 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src import __version__
 from src.api.routes import chat, facts, processes
 from src.db.graph.client import get_neo4j_client
+
+# Load environment variables from .env file
+load_dotenv()
 
 
 @asynccontextmanager
