@@ -1,0 +1,339 @@
+import { useCallback, useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import ReactFlow, {
+  Node,
+  Edge,
+  Controls,
+  Background,
+  BackgroundVariant,
+  NodeTypes,
+  ConnectionMode,
+  Panel,
+} from 'reactflow'
+import dagre from 'dagre'
+import { apiClient, getApiErrorMessage } from '../lib/api'
+import type { ProcessDag } from '../types/api'
+import 'reactflow/dist/style.css'
+
+/**
+ * Props for ProcessDAG component.
+ */
+export interface ProcessDAGProps {
+  /** Process ID to fetch DAG for (e.g., "boston_resident_parking_permit") */
+  processId: string
+  /** Callback when a node is clicked, receives the step ID */
+  onNodeClick?: (stepId: string) => void
+}
+
+/**
+ * Custom node component for process steps.
+ * Displays step label with styling.
+ */
+const StepNode = ({ data }: { data: { label: string; order: number } }): JSX.Element => {
+  return (
+    <div
+      style={{
+        padding: '12px 20px',
+        borderRadius: '8px',
+        border: '2px solid #007bff',
+        backgroundColor: '#ffffff',
+        minWidth: '150px',
+        textAlign: 'center',
+        cursor: 'pointer',
+        transition: 'all 0.2s',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.backgroundColor = '#e7f3ff'
+        e.currentTarget.style.borderColor = '#0056b3'
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.backgroundColor = '#ffffff'
+        e.currentTarget.style.borderColor = '#007bff'
+      }}
+    >
+      <div style={{ fontSize: '0.75rem', color: '#767676', marginBottom: '4px' }}>
+        Step {data.order}
+      </div>
+      <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#333' }}>{data.label}</div>
+    </div>
+  )
+}
+
+// Node types for reactflow
+const nodeTypes: NodeTypes = {
+  stepNode: StepNode,
+}
+
+/**
+ * Layout nodes using dagre for hierarchical positioning.
+ * Uses dagre's rank algorithm to create a top-to-bottom flow.
+ */
+const getLayoutedElements = (
+  nodes: Node[],
+  edges: Edge[],
+  direction: 'TB' | 'LR' = 'TB'
+): { nodes: Node[]; edges: Edge[] } => {
+  const dagreGraph = new dagre.graphlib.Graph()
+  dagreGraph.setDefaultEdgeLabel(() => ({}))
+
+  const nodeWidth = 200
+  const nodeHeight = 80
+
+  // Configure graph layout
+  dagreGraph.setGraph({
+    rankdir: direction,
+    nodesep: 80,
+    ranksep: 100,
+    marginx: 20,
+    marginy: 20,
+  })
+
+  // Add nodes to graph
+  nodes.forEach((node) => {
+    dagreGraph.setNode(node.id, { width: nodeWidth, height: nodeHeight })
+  })
+
+  // Add edges to graph
+  edges.forEach((edge) => {
+    dagreGraph.setEdge(edge.source, edge.target)
+  })
+
+  // Calculate layout
+  dagre.layout(dagreGraph)
+
+  // Apply layout positions to nodes
+  const layoutedNodes = nodes.map((node) => {
+    const nodeWithPosition = dagreGraph.node(node.id)
+    return {
+      ...node,
+      position: {
+        x: nodeWithPosition.x - nodeWidth / 2,
+        y: nodeWithPosition.y - nodeHeight / 2,
+      },
+    }
+  })
+
+  return { nodes: layoutedNodes, edges }
+}
+
+/**
+ * ProcessDAG component - interactive visualization of process steps.
+ *
+ * Features:
+ * - Fetches process DAG from backend API
+ * - Renders interactive graph with reactflow
+ * - Auto-layout using dagre (hierarchical top-to-bottom)
+ * - Click handler on nodes
+ * - Pan and zoom controls
+ * - Mobile-friendly (touch gestures)
+ * - Loading state
+ * - Error state
+ * - Accessible (ARIA labels, keyboard navigation)
+ */
+export const ProcessDAG = ({ processId, onNodeClick }: ProcessDAGProps): JSX.Element => {
+  // Fetch DAG data from backend
+  const {
+    data: dagData,
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
+    queryKey: ['process-dag', processId],
+    queryFn: async (): Promise<ProcessDag> => {
+      const response = await apiClient.get<ProcessDag>(`/processes/${processId}/dag`)
+      return response.data
+    },
+  })
+
+  // Transform backend nodes to reactflow format and apply layout
+  const { nodes, edges } = useMemo(() => {
+    if (!dagData) {
+      return { nodes: [], edges: [] }
+    }
+
+    // Convert backend nodes to reactflow nodes
+    const reactFlowNodes: Node[] = dagData.nodes.map((node) => ({
+      id: node.id,
+      type: 'stepNode',
+      data: {
+        label: node.label,
+        order: node.order,
+      },
+      position: { x: 0, y: 0 }, // Will be set by layout
+    }))
+
+    // Convert backend edges to reactflow edges
+    const reactFlowEdges: Edge[] = dagData.edges.map((edge, index) => ({
+      id: `edge-${index}`,
+      source: edge.source,
+      target: edge.target,
+      type: 'smoothstep',
+      animated: true,
+      style: { stroke: '#007bff', strokeWidth: 2 },
+      markerEnd: 'arrowclosed',
+    }))
+
+    // Apply dagre layout
+    return getLayoutedElements(reactFlowNodes, reactFlowEdges)
+  }, [dagData])
+
+  // Handle node click
+  const handleNodeClick = useCallback(
+    (_event: React.MouseEvent, node: Node) => {
+      if (onNodeClick) {
+        onNodeClick(node.id)
+      }
+    },
+    [onNodeClick]
+  )
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '400px',
+          backgroundColor: '#f8f9fa',
+          borderRadius: '8px',
+          border: '1px solid #ddd',
+        }}
+        role="status"
+        aria-live="polite"
+        aria-label="Loading process diagram"
+      >
+        <div style={{ textAlign: 'center' }}>
+          <div
+            style={{
+              width: '48px',
+              height: '48px',
+              border: '4px solid #e0e0e0',
+              borderTop: '4px solid #007bff',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite',
+              margin: '0 auto 1rem',
+            }}
+          />
+          <p style={{ color: '#767676', fontSize: '0.95rem' }}>Loading process diagram...</p>
+        </div>
+
+        {/* CSS animation for spinner */}
+        <style>{`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    )
+  }
+
+  // Error state
+  if (isError) {
+    const errorMessage = getApiErrorMessage(error)
+    return (
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '400px',
+          backgroundColor: '#fff5f5',
+          borderRadius: '8px',
+          border: '1px solid #fcc',
+        }}
+        role="alert"
+      >
+        <div style={{ textAlign: 'center', padding: '2rem' }}>
+          <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>⚠️</div>
+          <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: '#c00', marginBottom: '0.5rem' }}>
+            Failed to load process diagram
+          </h3>
+          <p style={{ color: '#767676', fontSize: '0.9rem' }}>{errorMessage}</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Empty state
+  if (!dagData || nodes.length === 0) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '400px',
+          backgroundColor: '#f8f9fa',
+          borderRadius: '8px',
+          border: '1px solid #ddd',
+        }}
+      >
+        <div style={{ textAlign: 'center', padding: '2rem' }}>
+          <p style={{ color: '#767676', fontSize: '0.95rem' }}>No process steps available</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Success state - render graph
+  return (
+    <div
+      style={{
+        height: '600px',
+        width: '100%',
+        border: '1px solid #ddd',
+        borderRadius: '8px',
+        overflow: 'hidden',
+        backgroundColor: '#ffffff',
+      }}
+    >
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        nodeTypes={nodeTypes}
+        onNodeClick={handleNodeClick}
+        connectionMode={ConnectionMode.Strict}
+        fitView
+        fitViewOptions={{
+          padding: 0.2,
+          minZoom: 0.5,
+          maxZoom: 1.5,
+        }}
+        minZoom={0.1}
+        maxZoom={2}
+        defaultViewport={{ x: 0, y: 0, zoom: 1 }}
+        attributionPosition="bottom-right"
+        // Accessibility
+        nodesDraggable={false}
+        nodesConnectable={false}
+        elementsSelectable={true}
+      >
+        <Background variant={BackgroundVariant.Dots} gap={16} size={1} color="#e0e0e0" />
+        <Controls
+          showZoom={true}
+          showFitView={true}
+          showInteractive={false}
+          position="top-right"
+        />
+        <Panel position="top-left" style={{ fontSize: '0.9rem', color: '#767676' }}>
+          <div
+            style={{
+              backgroundColor: '#ffffff',
+              padding: '0.5rem 0.75rem',
+              borderRadius: '4px',
+              border: '1px solid #ddd',
+              fontWeight: 500,
+            }}
+          >
+            Process Flow Diagram
+          </div>
+        </Panel>
+      </ReactFlow>
+    </div>
+  )
+}
+
+export default ProcessDAG
