@@ -1,5 +1,6 @@
 """FastAPI application entry point."""
 
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -38,10 +39,17 @@ app = FastAPI(
 )
 
 # CORS middleware configuration
-# TODO: Configure allowed origins from environment variables in production
+# Load allowed origins from environment variable (comma-separated list)
+# Defaults to common development servers if not set
+cors_origins_str = os.getenv(
+    "CORS_ORIGINS",
+    "http://localhost:5173,http://localhost:3000"
+)
+cors_origins: list[str] = [origin.strip() for origin in cors_origins_str.split(",")]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # Vite default dev server
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
