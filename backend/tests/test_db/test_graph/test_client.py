@@ -1,9 +1,9 @@
 """Tests for Neo4j client."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from neo4j.exceptions import ServiceUnavailable, Neo4jError
+import pytest
+from neo4j.exceptions import Neo4jError, ServiceUnavailable
 
 from src.db.graph.client import Neo4jClient, get_neo4j_client
 from src.db.graph.config import Neo4jConfig
@@ -127,9 +127,7 @@ class TestNeo4jClient:
     async def test_connect_neo4j_error(self) -> None:
         """Test connection failure with Neo4j error."""
         mock_driver = AsyncMock()
-        mock_driver.verify_connectivity = AsyncMock(
-            side_effect=Neo4jError("Auth failed")
-        )
+        mock_driver.verify_connectivity = AsyncMock(side_effect=Neo4jError("Auth failed"))
 
         with patch("src.db.graph.client.AsyncGraphDatabase.driver", return_value=mock_driver):
             client = Neo4jClient()
@@ -309,11 +307,7 @@ class TestNeo4jClientIntegration:
     async def test_real_connection_invalid_credentials(self) -> None:
         """Test connection with invalid credentials."""
         client = Neo4jClient()
-        config = Neo4jConfig(
-            uri="bolt://localhost:7687",
-            user="invalid",
-            password="invalid"
-        )
+        config = Neo4jConfig(uri="bolt://localhost:7687", user="invalid", password="invalid")
 
         with pytest.raises((ServiceUnavailable, Neo4jError)):
             await client.connect(config)

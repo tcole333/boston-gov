@@ -1,8 +1,9 @@
 """Neo4j database client with connection pooling and health checks."""
 
 import logging
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Optional
+from typing import Any, Optional
 
 from neo4j import AsyncDriver, AsyncGraphDatabase, AsyncSession
 from neo4j.exceptions import Neo4jError, ServiceUnavailable
@@ -42,8 +43,8 @@ class Neo4jClient:
     """
 
     _instance: Optional["Neo4jClient"] = None
-    _driver: Optional[AsyncDriver] = None
-    _config: Optional[Neo4jConfig] = None
+    _driver: AsyncDriver | None = None
+    _config: Neo4jConfig | None = None
 
     def __new__(cls) -> "Neo4jClient":
         """Implement singleton pattern."""
@@ -55,7 +56,7 @@ class Neo4jClient:
         """Initialize client (config loaded on connect())."""
         pass
 
-    async def connect(self, config: Optional[Neo4jConfig] = None) -> None:
+    async def connect(self, config: Neo4jConfig | None = None) -> None:
         """
         Initialize Neo4j driver with connection pooling.
 
@@ -106,9 +107,7 @@ class Neo4jClient:
             logger.info("Neo4j driver closed")
 
     @asynccontextmanager
-    async def get_session(
-        self, database: Optional[str] = None
-    ) -> AsyncIterator[AsyncSession]:
+    async def get_session(self, database: str | None = None) -> AsyncIterator[AsyncSession]:
         """
         Get a Neo4j session as an async context manager.
 
@@ -131,9 +130,7 @@ class Neo4jClient:
             ```
         """
         if self._driver is None:
-            raise RuntimeError(
-                "Neo4j driver not connected. Call connect() first."
-            )
+            raise RuntimeError("Neo4j driver not connected. Call connect() first.")
 
         db = database or (self._config.database if self._config else None)
 
@@ -218,7 +215,7 @@ class Neo4jClient:
 
 
 # Singleton instance for FastAPI dependency injection
-_neo4j_client: Optional[Neo4jClient] = None
+_neo4j_client: Neo4jClient | None = None
 
 
 def get_neo4j_client() -> Neo4jClient:

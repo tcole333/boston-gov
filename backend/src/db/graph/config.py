@@ -1,7 +1,5 @@
 """Neo4j database configuration."""
 
-from typing import Optional
-
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -24,7 +22,7 @@ class Neo4jConfig(BaseSettings):
     uri: str = "bolt://localhost:7687"
     user: str = "neo4j"
     password: str = "password"
-    database: Optional[str] = None  # None = default DB
+    database: str | None = None  # None = default DB
     max_connection_lifetime: int = 3600
     max_connection_pool_size: int = 50
     connection_timeout: float = 30.0

@@ -29,7 +29,6 @@ from neo4j import AsyncSession
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.db.graph.client import Neo4jClient
-from src.db.graph.config import Neo4jConfig
 
 # Configure logging
 logging.basicConfig(
@@ -58,7 +57,7 @@ def load_facts_registry(facts_path: str) -> dict[str, Any]:
     if not Path(facts_path).exists():
         raise FileNotFoundError(f"Facts file not found: {facts_path}")
 
-    with open(facts_path, "r", encoding="utf-8") as f:
+    with open(facts_path, encoding="utf-8") as f:
         data = yaml.safe_load(f)
 
     logger.info(f"Loaded {len(data.get('facts', []))} facts from registry")
@@ -220,9 +219,7 @@ async def create_step_nodes(session: AsyncSession) -> None:
     logger.info(f"Created {len(steps)} Step nodes")
 
 
-async def create_requirement_nodes(
-    session: AsyncSession, facts_data: dict[str, Any]
-) -> None:
+async def create_requirement_nodes(session: AsyncSession, facts_data: dict[str, Any]) -> None:
     """
     Create Requirement nodes from the facts registry.
 
@@ -302,9 +299,7 @@ async def create_requirement_nodes(
     logger.info(f"Created {len(requirements)} Requirement nodes")
 
 
-async def create_document_type_nodes(
-    session: AsyncSession, facts_data: dict[str, Any]
-) -> None:
+async def create_document_type_nodes(session: AsyncSession, facts_data: dict[str, Any]) -> None:
     """
     Create DocumentType nodes for acceptable proof documents.
 

@@ -6,6 +6,7 @@ document parsing, OCR processing, and validation.
 """
 
 import os
+
 from celery import Celery
 
 # Get configuration from environment variables
