@@ -872,6 +872,24 @@ describe('StepDetail Component', () => {
     })
   })
 
+  it('renders with stepId containing dots (dot notation)', async () => {
+    mockApiGet.mockImplementation((url: string) => {
+      if (url.includes('/steps/')) {
+        return Promise.resolve({ data: mockStep })
+      }
+      return Promise.resolve({ data: [] })
+    })
+
+    // Should work with dot-notation IDs (e.g., rpp.step.eligibility.check)
+    renderWithQueryClient(
+      <StepDetail stepId="rpp.step.eligibility.check" processId="boston.resident.parking.permit" />
+    )
+
+    await waitFor(() => {
+      expect(mockApiGet).toHaveBeenCalled()
+    })
+  })
+
   it('rejects invalid stepId format', async () => {
     renderWithQueryClient(
       <StepDetail stepId="invalid@id!" processId="boston_resident_parking_permit" />
