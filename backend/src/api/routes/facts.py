@@ -85,17 +85,17 @@ async def list_facts(
     except RegistryNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Registry '{registry_name}' not found: {str(e)}",
+            detail=f"Registry '{registry_name}' not found",
         ) from e
     except (RegistryParseError, RegistryValidationError) as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error loading registry '{registry_name}': {str(e)}",
+            detail=f"Error loading registry '{registry_name}'",
         ) from e
     except FactsServiceError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving facts: {str(e)}",
+            detail="Error retrieving facts",
         ) from e
 
 
@@ -133,7 +133,7 @@ async def search_facts(
     except FactsServiceError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error searching facts: {str(e)}",
+            detail="Error searching facts",
         ) from e
 
 
@@ -172,7 +172,7 @@ async def get_fact(
     except FactsServiceError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving fact: {str(e)}",
+            detail="Error retrieving fact",
         ) from e
 
 
@@ -203,7 +203,7 @@ async def list_registries(
     except FactsServiceError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving registries: {str(e)}",
+            detail="Error retrieving registries",
         ) from e
 
 
@@ -249,17 +249,17 @@ async def get_registry_metadata(
     except RegistryNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Registry '{registry_name}' not found: {str(e)}",
+            detail=f"Registry '{registry_name}' not found",
         ) from e
     except (RegistryParseError, RegistryValidationError) as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error loading registry '{registry_name}': {str(e)}",
+            detail=f"Error loading registry '{registry_name}'",
         ) from e
     except FactsServiceError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving registry metadata: {str(e)}",
+            detail="Error retrieving registry metadata",
         ) from e
 
 
@@ -310,15 +310,15 @@ async def load_registry(
     except RegistryNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Registry '{registry_name}' not found: {str(e)}",
+            detail=f"Registry '{registry_name}' not found",
         ) from e
     except (RegistryParseError, RegistryValidationError) as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error loading registry '{registry_name}': {str(e)}",
+            detail=f"Error loading registry '{registry_name}'",
         ) from e
     except FactsServiceError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error loading registry: {str(e)}",
+            detail="Error loading registry",
         ) from e

@@ -10,6 +10,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import HttpUrl
 
 from src.api.routes.facts import get_facts_service_dependency
 from src.main import app
@@ -44,7 +45,9 @@ def mock_fact() -> Fact:
     return Fact(
         id="rpp.eligibility.vehicle_class",
         text="Vehicle must be a passenger vehicle or motorcycle",
-        source_url="https://www.boston.gov/departments/parking-clerk/how-get-resident-parking-permit",
+        source_url=HttpUrl(
+            "https://www.boston.gov/departments/parking-clerk/how-get-resident-parking-permit"
+        ),
         source_section="Eligibility Requirements",
         last_verified=date(2025, 11, 9),
         confidence=ConfidenceLevel.HIGH,
@@ -57,7 +60,9 @@ def mock_fact_2() -> Fact:
     return Fact(
         id="rpp.eligibility.registration_state",
         text="Vehicle must be registered in Massachusetts",
-        source_url="https://www.boston.gov/departments/parking-clerk/how-get-resident-parking-permit",
+        source_url=HttpUrl(
+            "https://www.boston.gov/departments/parking-clerk/how-get-resident-parking-permit"
+        ),
         source_section="Eligibility Requirements",
         last_verified=date(2025, 11, 9),
         confidence=ConfidenceLevel.HIGH,
