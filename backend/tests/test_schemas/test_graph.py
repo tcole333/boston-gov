@@ -9,6 +9,7 @@ Tests cover:
 """
 
 from datetime import date, datetime
+from typing import Any
 
 import pytest
 from pydantic import ValidationError
@@ -31,6 +32,43 @@ from src.schemas.graph import (
     WebResource,
     WebResourceType,
 )
+
+
+# Fixtures for common test data
+@pytest.fixture
+def valid_citation_fields() -> dict[str, Any]:
+    """Provide valid citation fields for testing."""
+    return {
+        "source_url": "https://www.boston.gov/test",
+        "last_verified": date(2025, 11, 9),
+        "confidence": ConfidenceLevel.HIGH,
+    }
+
+
+@pytest.fixture
+def valid_process_data(valid_citation_fields: dict[str, Any]) -> dict[str, Any]:
+    """Provide valid process data for testing."""
+    return {
+        "process_id": "test_process",
+        "name": "Test Process",
+        "description": "A test process",
+        "category": ProcessCategory.PERMITS,
+        "jurisdiction": "City of Boston",
+        **valid_citation_fields,
+    }
+
+
+@pytest.fixture
+def valid_step_data(valid_citation_fields: dict[str, Any]) -> dict[str, Any]:
+    """Provide valid step data for testing."""
+    return {
+        "step_id": "test_step",
+        "process_id": "test_process",
+        "name": "Test Step",
+        "description": "A test step",
+        "order": 1,
+        **valid_citation_fields,
+    }
 
 
 class TestConfidenceLevel:
@@ -56,6 +94,58 @@ class TestProcessCategory:
         assert ProcessCategory.PERMITS == "permits"
         assert ProcessCategory.LICENSES == "licenses"
         assert ProcessCategory.BENEFITS == "benefits"
+
+    def test_invalid_value(self) -> None:
+        """Test that invalid values raise ValueError."""
+        with pytest.raises(ValueError):
+            ProcessCategory("invalid_category")
+
+
+class TestWebResourceType:
+    """Test WebResourceType enum."""
+
+    def test_valid_values(self) -> None:
+        """Test that all expected values are valid."""
+        assert WebResourceType.HOW_TO == "how_to"
+        assert WebResourceType.PROGRAM == "program"
+        assert WebResourceType.PORTAL == "portal"
+        assert WebResourceType.PDF_FORM == "pdf_form"
+
+    def test_invalid_value(self) -> None:
+        """Test that invalid values raise ValueError."""
+        with pytest.raises(ValueError):
+            WebResourceType("invalid_type")
+
+
+class TestApplicationStatus:
+    """Test ApplicationStatus enum."""
+
+    def test_valid_values(self) -> None:
+        """Test that all expected values are valid."""
+        assert ApplicationStatus.PENDING == "pending"
+        assert ApplicationStatus.APPROVED == "approved"
+        assert ApplicationStatus.DENIED == "denied"
+
+    def test_invalid_value(self) -> None:
+        """Test that invalid values raise ValueError."""
+        with pytest.raises(ValueError):
+            ApplicationStatus("invalid_status")
+
+
+class TestApplicationCategory:
+    """Test ApplicationCategory enum."""
+
+    def test_valid_values(self) -> None:
+        """Test that all expected values are valid."""
+        assert ApplicationCategory.NEW == "new"
+        assert ApplicationCategory.RENEWAL == "renewal"
+        assert ApplicationCategory.REPLACEMENT == "replacement"
+        assert ApplicationCategory.RENTAL == "rental"
+
+    def test_invalid_value(self) -> None:
+        """Test that invalid values raise ValueError."""
+        with pytest.raises(ValueError):
+            ApplicationCategory("invalid_category")
 
 
 class TestProcess:
@@ -91,35 +181,19 @@ class TestProcess:
         assert "description" in error_fields
         assert "category" in error_fields
 
-    def test_invalid_url(self) -> None:
+    def test_invalid_url(self, valid_process_data: dict[str, Any]) -> None:
         """Test that invalid URL raises ValidationError."""
+        valid_process_data["source_url"] = "not-a-url"
         with pytest.raises(ValidationError) as exc_info:
-            Process(
-                process_id="test",
-                name="Test",
-                description="Test description",
-                category=ProcessCategory.PERMITS,
-                jurisdiction="Test",
-                source_url="not-a-url",
-                last_verified=date(2025, 11, 9),
-                confidence=ConfidenceLevel.HIGH,
-            )
+            Process(**valid_process_data)
         errors = exc_info.value.errors()
         assert any(e["loc"][0] == "source_url" for e in errors)
 
-    def test_empty_process_id(self) -> None:
+    def test_empty_process_id(self, valid_process_data: dict[str, Any]) -> None:
         """Test that empty process_id raises ValidationError."""
+        valid_process_data["process_id"] = ""
         with pytest.raises(ValidationError) as exc_info:
-            Process(
-                process_id="",
-                name="Test",
-                description="Test description",
-                category=ProcessCategory.PERMITS,
-                jurisdiction="Test",
-                source_url="https://test.com",
-                last_verified=date(2025, 11, 9),
-                confidence=ConfidenceLevel.HIGH,
-            )
+            Process(**valid_process_data)
         errors = exc_info.value.errors()
         assert any(e["loc"][0] == "process_id" for e in errors)
 
@@ -164,72 +238,34 @@ class TestStep:
         assert step.cost_usd == 0.0
         assert not step.optional
 
-    def test_optional_fields(self) -> None:
+    def test_optional_fields(self, valid_step_data: dict[str, Any]) -> None:
         """Test that optional fields have correct defaults."""
-        step = Step(
-            step_id="test",
-            process_id="test_process",
-            name="Test Step",
-            description="Test",
-            order=1,
-            source_url="https://test.com",
-            last_verified=date(2025, 11, 9),
-            confidence=ConfidenceLevel.HIGH,
-        )
+        step = Step(**valid_step_data)
         assert step.estimated_time_minutes is None
         assert step.observed_time_minutes is None
         assert step.cost_usd == 0.0
         assert not step.optional
 
-    def test_negative_order(self) -> None:
-        """Test that negative order raises ValidationError."""
-        with pytest.raises(ValidationError) as exc_info:
-            Step(
-                step_id="test",
-                process_id="test_process",
-                name="Test Step",
-                description="Test",
-                order=0,  # Must be >= 1
-                source_url="https://test.com",
-                last_verified=date(2025, 11, 9),
-                confidence=ConfidenceLevel.HIGH,
-            )
-        errors = exc_info.value.errors()
-        assert any(e["loc"][0] == "order" for e in errors)
+    @pytest.mark.parametrize(
+        "field,value",
+        [
+            ("order", 0),
+            ("cost_usd", -10.0),
+            ("estimated_time_minutes", -5),
+            ("observed_time_minutes", -3),
+        ],
+    )
+    def test_negative_numeric_fields(
+        self, valid_step_data: dict[str, Any], field: str, value: float
+    ) -> None:
+        """Test that negative values are rejected for numeric fields."""
+        valid_step_data[field] = value
 
-    def test_negative_cost(self) -> None:
-        """Test that negative cost raises ValidationError."""
         with pytest.raises(ValidationError) as exc_info:
-            Step(
-                step_id="test",
-                process_id="test_process",
-                name="Test Step",
-                description="Test",
-                order=1,
-                cost_usd=-10.0,
-                source_url="https://test.com",
-                last_verified=date(2025, 11, 9),
-                confidence=ConfidenceLevel.HIGH,
-            )
-        errors = exc_info.value.errors()
-        assert any(e["loc"][0] == "cost_usd" for e in errors)
+            Step(**valid_step_data)
 
-    def test_negative_time(self) -> None:
-        """Test that negative time estimates raise ValidationError."""
-        with pytest.raises(ValidationError) as exc_info:
-            Step(
-                step_id="test",
-                process_id="test_process",
-                name="Test Step",
-                description="Test",
-                order=1,
-                estimated_time_minutes=-5,
-                source_url="https://test.com",
-                last_verified=date(2025, 11, 9),
-                confidence=ConfidenceLevel.HIGH,
-            )
         errors = exc_info.value.errors()
-        assert any(e["loc"][0] == "estimated_time_minutes" for e in errors)
+        assert any(e["loc"][0] == field for e in errors)
 
 
 class TestRequirement:
@@ -571,6 +607,170 @@ class TestApplication:
         )
         assert app.status == ApplicationStatus.DENIED
         assert app.reason_if_denied == "Missing required documents"
+
+
+class TestWhitespaceValidation:
+    """Test whitespace validation for identifier fields."""
+
+    def test_process_id_whitespace_only(self, valid_process_data: dict[str, Any]) -> None:
+        """Test that whitespace-only process_id is rejected."""
+        valid_process_data["process_id"] = "   "
+        with pytest.raises(ValidationError) as exc_info:
+            Process(**valid_process_data)
+        errors = exc_info.value.errors()
+        assert any(e["loc"][0] == "process_id" for e in errors)
+
+    def test_process_id_with_surrounding_whitespace(
+        self, valid_process_data: dict[str, Any]
+    ) -> None:
+        """Test that process_id with surrounding whitespace is stripped."""
+        valid_process_data["process_id"] = "  test_process  "
+        process = Process(**valid_process_data)
+        assert process.process_id == "test_process"
+
+    def test_step_id_whitespace_only(self, valid_step_data: dict[str, Any]) -> None:
+        """Test that whitespace-only step_id is rejected."""
+        valid_step_data["step_id"] = "   "
+        with pytest.raises(ValidationError) as exc_info:
+            Step(**valid_step_data)
+        errors = exc_info.value.errors()
+        assert any(e["loc"][0] == "step_id" for e in errors)
+
+    def test_step_process_id_whitespace_only(self, valid_step_data: dict[str, Any]) -> None:
+        """Test that whitespace-only process_id in Step is rejected."""
+        valid_step_data["process_id"] = "   "
+        with pytest.raises(ValidationError) as exc_info:
+            Step(**valid_step_data)
+        errors = exc_info.value.errors()
+        assert any(e["loc"][0] == "process_id" for e in errors)
+
+    def test_requirement_id_whitespace_only(self, valid_citation_fields: dict[str, Any]) -> None:
+        """Test that whitespace-only requirement_id is rejected."""
+        with pytest.raises(ValidationError) as exc_info:
+            Requirement(
+                requirement_id="   ",
+                text="Test requirement",
+                fact_id="test.fact",
+                applies_to_process="test",
+                **valid_citation_fields,
+            )
+        errors = exc_info.value.errors()
+        assert any(e["loc"][0] == "requirement_id" for e in errors)
+
+    def test_requirement_fact_id_whitespace_only(
+        self, valid_citation_fields: dict[str, Any]
+    ) -> None:
+        """Test that whitespace-only fact_id in Requirement is rejected."""
+        with pytest.raises(ValidationError) as exc_info:
+            Requirement(
+                requirement_id="test",
+                text="Test requirement",
+                fact_id="   ",
+                applies_to_process="test",
+                **valid_citation_fields,
+            )
+        errors = exc_info.value.errors()
+        assert any(e["loc"][0] == "fact_id" for e in errors)
+
+    def test_rule_id_whitespace_only(self, valid_citation_fields: dict[str, Any]) -> None:
+        """Test that whitespace-only rule_id is rejected."""
+        with pytest.raises(ValidationError) as exc_info:
+            Rule(
+                rule_id="   ",
+                text="Test rule",
+                fact_id="test.fact",
+                source_section="Section 1",
+                **valid_citation_fields,
+            )
+        errors = exc_info.value.errors()
+        assert any(e["loc"][0] == "rule_id" for e in errors)
+
+    def test_doc_type_id_whitespace_only(self, valid_citation_fields: dict[str, Any]) -> None:
+        """Test that whitespace-only doc_type_id is rejected."""
+        with pytest.raises(ValidationError) as exc_info:
+            DocumentType(
+                doc_type_id="   ",
+                name="Test Doc",
+                freshness_days=30,
+                **valid_citation_fields,
+            )
+        errors = exc_info.value.errors()
+        assert any(e["loc"][0] == "doc_type_id" for e in errors)
+
+    def test_document_doc_id_whitespace_only(self) -> None:
+        """Test that whitespace-only doc_id is rejected."""
+        with pytest.raises(ValidationError) as exc_info:
+            Document(
+                doc_id="   ",
+                doc_type_id="test",
+                issuer="Test",
+                issue_date=date(2025, 11, 9),
+                name_on_doc="Test",
+                address_on_doc="Test",
+                file_ref="/test",
+            )
+        errors = exc_info.value.errors()
+        assert any(e["loc"][0] == "doc_id" for e in errors)
+
+    def test_office_id_whitespace_only(self, valid_citation_fields: dict[str, Any]) -> None:
+        """Test that whitespace-only office_id is rejected."""
+        with pytest.raises(ValidationError) as exc_info:
+            Office(
+                office_id="   ",
+                name="Test Office",
+                address="123 Main St",
+                hours="Mon-Fri",
+                **valid_citation_fields,
+            )
+        errors = exc_info.value.errors()
+        assert any(e["loc"][0] == "office_id" for e in errors)
+
+    def test_nbrhd_id_whitespace_only(self, valid_citation_fields: dict[str, Any]) -> None:
+        """Test that whitespace-only nbrhd_id is rejected."""
+        with pytest.raises(ValidationError) as exc_info:
+            RPPNeighborhood(
+                nbrhd_id="   ",
+                name="Test Neighborhood",
+                **valid_citation_fields,
+            )
+        errors = exc_info.value.errors()
+        assert any(e["loc"][0] == "nbrhd_id" for e in errors)
+
+    def test_res_id_whitespace_only(self) -> None:
+        """Test that whitespace-only res_id is rejected."""
+        with pytest.raises(ValidationError) as exc_info:
+            WebResource(
+                res_id="   ",
+                title="Test",
+                url="https://test.com",
+                type=WebResourceType.HOW_TO,
+                owner="Test",
+                last_seen=date(2025, 11, 9),
+                hash="a" * 64,
+            )
+        errors = exc_info.value.errors()
+        assert any(e["loc"][0] == "res_id" for e in errors)
+
+    def test_person_id_whitespace_only(self) -> None:
+        """Test that whitespace-only person_id is rejected."""
+        with pytest.raises(ValidationError) as exc_info:
+            Person(
+                person_id="   ",
+                email="test@test.com",
+            )
+        errors = exc_info.value.errors()
+        assert any(e["loc"][0] == "person_id" for e in errors)
+
+    def test_app_id_whitespace_only(self) -> None:
+        """Test that whitespace-only app_id is rejected."""
+        with pytest.raises(ValidationError) as exc_info:
+            Application(
+                app_id="   ",
+                process_id="test",
+                category=ApplicationCategory.NEW,
+            )
+        errors = exc_info.value.errors()
+        assert any(e["loc"][0] == "app_id" for e in errors)
 
 
 class TestSerialization:

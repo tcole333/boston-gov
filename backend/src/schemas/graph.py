@@ -142,6 +142,14 @@ class Process(CitationMixin, TimestampMixin):
         min_length=1, max_length=200, description="Governing authority (e.g., 'City of Boston')"
     )
 
+    @field_validator("process_id")
+    @classmethod
+    def validate_process_id(cls, v: str) -> str:
+        """Validate that process_id is not empty or whitespace-only."""
+        if not v or not v.strip():
+            raise ValueError("process_id cannot be empty or whitespace-only")
+        return v.strip()
+
 
 class Step(CitationMixin, TimestampMixin):
     """Actionable task within a process.
@@ -174,6 +182,14 @@ class Step(CitationMixin, TimestampMixin):
     cost_usd: float = Field(default=0.0, ge=0.0, description="Cost in USD")
     optional: bool = Field(default=False, description="Whether this step can be skipped")
 
+    @field_validator("step_id", "process_id")
+    @classmethod
+    def validate_identifier(cls, v: str) -> str:
+        """Validate that identifier is not empty or whitespace-only."""
+        if not v or not v.strip():
+            raise ValueError("Identifier cannot be empty or whitespace-only")
+        return v.strip()
+
 
 class Requirement(CitationMixin, TimestampMixin):
     """Eligibility condition or rule.
@@ -204,6 +220,14 @@ class Requirement(CitationMixin, TimestampMixin):
     hard_gate: bool = Field(default=True, description="Whether this blocks progress if not met")
     source_section: str | None = Field(default=None, description="Page or PDF section reference")
 
+    @field_validator("requirement_id", "fact_id", "applies_to_process")
+    @classmethod
+    def validate_identifier(cls, v: str) -> str:
+        """Validate that identifier is not empty or whitespace-only."""
+        if not v or not v.strip():
+            raise ValueError("Identifier cannot be empty or whitespace-only")
+        return v.strip()
+
 
 class Rule(CitationMixin, TimestampMixin):
     """Atomic regulatory fact.
@@ -230,6 +254,14 @@ class Rule(CitationMixin, TimestampMixin):
     )
     source_section: str = Field(min_length=1, description="Section/page number reference")
     effective_date: date | None = Field(default=None, description="When this rule took effect")
+
+    @field_validator("rule_id", "fact_id")
+    @classmethod
+    def validate_identifier(cls, v: str) -> str:
+        """Validate that identifier is not empty or whitespace-only."""
+        if not v or not v.strip():
+            raise ValueError("Identifier cannot be empty or whitespace-only")
+        return v.strip()
 
 
 class DocumentType(CitationMixin, TimestampMixin):
@@ -261,6 +293,14 @@ class DocumentType(CitationMixin, TimestampMixin):
         default_factory=list,
         description="List of example issuers (e.g., ['National Grid', 'Eversource'])",
     )
+
+    @field_validator("doc_type_id")
+    @classmethod
+    def validate_doc_type_id(cls, v: str) -> str:
+        """Validate that doc_type_id is not empty or whitespace-only."""
+        if not v or not v.strip():
+            raise ValueError("doc_type_id cannot be empty or whitespace-only")
+        return v.strip()
 
 
 class Document(TimestampMixin):
@@ -299,6 +339,14 @@ class Document(TimestampMixin):
         default=None, description="When document will be/was deleted (created_at + 24h)"
     )
 
+    @field_validator("doc_id", "doc_type_id")
+    @classmethod
+    def validate_identifier(cls, v: str) -> str:
+        """Validate that identifier is not empty or whitespace-only."""
+        if not v or not v.strip():
+            raise ValueError("Identifier cannot be empty or whitespace-only")
+        return v.strip()
+
 
 class Office(CitationMixin, TimestampMixin):
     """Physical location for in-person steps.
@@ -323,6 +371,14 @@ class Office(CitationMixin, TimestampMixin):
     phone: str | None = Field(default=None, description="Phone number")
     email: str | None = Field(default=None, description="Email address")
 
+    @field_validator("office_id")
+    @classmethod
+    def validate_office_id(cls, v: str) -> str:
+        """Validate that office_id is not empty or whitespace-only."""
+        if not v or not v.strip():
+            raise ValueError("office_id cannot be empty or whitespace-only")
+        return v.strip()
+
 
 class RPPNeighborhood(CitationMixin, TimestampMixin):
     """Boston parking neighborhood (RPP-specific).
@@ -344,6 +400,14 @@ class RPPNeighborhood(CitationMixin, TimestampMixin):
         default_factory=list, description="Street names with RPP signage"
     )
     notes: str | None = Field(default=None, description="Special rules or notes")
+
+    @field_validator("nbrhd_id")
+    @classmethod
+    def validate_nbrhd_id(cls, v: str) -> str:
+        """Validate that nbrhd_id is not empty or whitespace-only."""
+        if not v or not v.strip():
+            raise ValueError("nbrhd_id cannot be empty or whitespace-only")
+        return v.strip()
 
 
 class WebResource(TimestampMixin):
@@ -375,6 +439,14 @@ class WebResource(TimestampMixin):
         min_length=64, max_length=64, description="SHA256 hash of content for change detection"
     )
 
+    @field_validator("res_id")
+    @classmethod
+    def validate_res_id(cls, v: str) -> str:
+        """Validate that res_id is not empty or whitespace-only."""
+        if not v or not v.strip():
+            raise ValueError("res_id cannot be empty or whitespace-only")
+        return v.strip()
+
     @field_validator("hash")
     @classmethod
     def validate_hash(cls, v: str) -> str:
@@ -400,6 +472,14 @@ class Person(BaseModel):
     created_at: datetime = Field(
         default_factory=datetime.now, description="When user record was created"
     )
+
+    @field_validator("person_id")
+    @classmethod
+    def validate_person_id(cls, v: str) -> str:
+        """Validate that person_id is not empty or whitespace-only."""
+        if not v or not v.strip():
+            raise ValueError("person_id cannot be empty or whitespace-only")
+        return v.strip()
 
 
 class Application(TimestampMixin):
@@ -428,6 +508,14 @@ class Application(TimestampMixin):
     reason_if_denied: str | None = Field(
         default=None, description="Reason for denial if status is DENIED"
     )
+
+    @field_validator("app_id", "process_id")
+    @classmethod
+    def validate_identifier(cls, v: str) -> str:
+        """Validate that identifier is not empty or whitespace-only."""
+        if not v or not v.strip():
+            raise ValueError("Identifier cannot be empty or whitespace-only")
+        return v.strip()
 
 
 # Export all schemas for easy importing
