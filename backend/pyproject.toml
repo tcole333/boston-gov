@@ -105,6 +105,9 @@ addopts = [
     "--cov-report=html",
 ]
 asyncio_mode = "auto"
+markers = [
+    "integration: marks tests as integration tests (require external services)",
+]
 
 [tool.coverage.run]
 source = ["src"]
