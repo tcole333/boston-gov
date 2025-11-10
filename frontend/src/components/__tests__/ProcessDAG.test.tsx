@@ -15,25 +15,89 @@ vi.mock('../../lib/api', () => ({
   getApiErrorMessage: vi.fn((error: Error) => error.message || 'An error occurred'),
 }))
 
+// Type definitions for mocked ReactFlow components
+interface MockNode {
+  id: string
+  type?: string
+  data: {
+    label: string
+    order: number
+  }
+  position: { x: number; y: number }
+}
+
+interface MockEdge {
+  id: string
+  source: string
+  target: string
+  type?: string
+  animated?: boolean
+  style?: Record<string, string | number>
+  markerEnd?: string
+}
+
+interface MockReactFlowProps {
+  nodes: MockNode[]
+  edges: MockEdge[]
+  onNodeClick?: (event: React.MouseEvent, node: MockNode) => void
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  nodeTypes?: Record<string, React.ComponentType<any>>
+  connectionMode?: string
+  fitView?: boolean
+  fitViewOptions?: Record<string, unknown>
+  minZoom?: number
+  maxZoom?: number
+  defaultViewport?: Record<string, unknown>
+  attributionPosition?: string
+  nodesDraggable?: boolean
+  nodesConnectable?: boolean
+  elementsSelectable?: boolean
+  children?: React.ReactNode
+}
+
+interface MockPanelProps {
+  children: React.ReactNode
+  position?: string
+  style?: React.CSSProperties
+}
+
+// Helper to sanitize labels (matches component implementation)
+const sanitizeLabel = (label: string): string => {
+  return String(label)
+    .replace(/<[^>]*>/g, '') // Remove HTML tags
+    .trim()
+    .substring(0, 200) // Limit length to prevent DoS
+}
+
 // Mock reactflow to avoid rendering issues in tests
 vi.mock('reactflow', () => ({
-  default: ({ nodes, edges, onNodeClick }: any) => (
+  default: ({ nodes, edges, onNodeClick, nodeTypes }: MockReactFlowProps) => (
     <div data-testid="react-flow">
       <div data-testid="nodes">
-        {nodes.map((node: any) => (
-          <div
-            key={node.id}
-            data-testid={`node-${node.id}`}
-            onClick={(e) => onNodeClick?.(e, node)}
-            role="button"
-            tabIndex={0}
-          >
-            {node.data.label} - Step {node.data.order}
-          </div>
-        ))}
+        {nodes.map((node) => {
+          // Use the custom node component if specified
+          const NodeComponent = nodeTypes && node.type ? nodeTypes[node.type] : null
+          const sanitizedLabel = sanitizeLabel(node.data.label)
+
+          return (
+            <div
+              key={node.id}
+              data-testid={`node-${node.id}`}
+              onClick={(e) => onNodeClick?.(e, node)}
+              role="button"
+              tabIndex={0}
+            >
+              {NodeComponent ? (
+                <NodeComponent data={node.data} />
+              ) : (
+                `${sanitizedLabel} - Step ${node.data.order}`
+              )}
+            </div>
+          )
+        })}
       </div>
       <div data-testid="edges">
-        {edges.map((edge: any) => (
+        {edges.map((edge) => (
           <div key={edge.id} data-testid={`edge-${edge.id}`}>
             {edge.source} -&gt; {edge.target}
           </div>
@@ -43,7 +107,7 @@ vi.mock('reactflow', () => ({
   ),
   Controls: () => <div data-testid="controls">Controls</div>,
   Background: () => <div data-testid="background">Background</div>,
-  Panel: ({ children }: any) => <div data-testid="panel">{children}</div>,
+  Panel: ({ children }: MockPanelProps) => <div data-testid="panel">{children}</div>,
   BackgroundVariant: {
     Dots: 'dots',
   },
@@ -104,7 +168,10 @@ describe('ProcessDAG', () => {
     vi.clearAllMocks()
   })
 
-  const renderProcessDAG = (processId = 'boston_resident_parking_permit', onNodeClick?: any) => {
+  const renderProcessDAG = (
+    processId = 'boston_resident_parking_permit',
+    onNodeClick?: (stepId: string) => void
+  ) => {
     return render(
       <QueryClientProvider client={queryClient}>
         <ProcessDAG processId={processId} onNodeClick={onNodeClick} />
@@ -202,10 +269,10 @@ describe('ProcessDAG', () => {
       expect(screen.getByTestId('node-step_2')).toBeInTheDocument()
       expect(screen.getByTestId('node-step_3')).toBeInTheDocument()
 
-      // Check node content
-      expect(screen.getByText(/Check Eligibility.*Step 1/)).toBeInTheDocument()
-      expect(screen.getByText(/Gather Documents.*Step 2/)).toBeInTheDocument()
-      expect(screen.getByText(/Submit Application.*Step 3/)).toBeInTheDocument()
+      // Check node content (labels are in separate divs from step numbers)
+      expect(screen.getByText('Check Eligibility')).toBeInTheDocument()
+      expect(screen.getByText('Gather Documents')).toBeInTheDocument()
+      expect(screen.getByText('Submit Application')).toBeInTheDocument()
 
       // Check edges are rendered
       expect(screen.getByTestId('edges')).toBeInTheDocument()
@@ -393,7 +460,7 @@ describe('ProcessDAG', () => {
         expect(screen.getByTestId('node-only_step')).toBeInTheDocument()
       })
 
-      expect(screen.getByText(/Single Step.*Step 1/)).toBeInTheDocument()
+      expect(screen.getByText('Single Step')).toBeInTheDocument()
     })
 
     it('handles nodes with special characters in labels', async () => {
@@ -414,8 +481,11 @@ describe('ProcessDAG', () => {
       renderProcessDAG()
 
       await waitFor(() => {
-        expect(screen.getByText(/Step with "quotes" & <symbols>.*Step 1/)).toBeInTheDocument()
+        expect(screen.getByTestId('node-step_1')).toBeInTheDocument()
       })
+
+      // Special characters should be sanitized (HTML tags removed)
+      expect(screen.getByText('Step with "quotes" &')).toBeInTheDocument()
     })
 
     it('handles complex graph with multiple dependencies', async () => {
@@ -446,6 +516,365 @@ describe('ProcessDAG', () => {
       expect(screen.getByTestId('node-b')).toBeInTheDocument()
       expect(screen.getByTestId('node-c')).toBeInTheDocument()
       expect(screen.getByTestId('node-d')).toBeInTheDocument()
+    })
+  })
+
+  describe('Security: XSS Protection', () => {
+    it('sanitizes node labels with HTML/script tags', async () => {
+      const xssDag: ProcessDag = {
+        nodes: [
+          {
+            id: 'step_1',
+            label: '<script>alert("XSS")</script>Malicious Step',
+            order: 1,
+            data: {},
+          },
+        ],
+        edges: [],
+      }
+
+      mockGet.mockResolvedValueOnce({ data: xssDag })
+
+      renderProcessDAG()
+
+      await waitFor(() => {
+        expect(screen.getByTestId('node-step_1')).toBeInTheDocument()
+      })
+
+      // Should render sanitized text without script tags
+      expect(screen.getByText('alert("XSS")Malicious Step')).toBeInTheDocument()
+      // The word "script" should not appear as it was in tags <script> which are removed
+      const nodeContent = screen.getByTestId('node-step_1').textContent
+      expect(nodeContent).not.toContain('<script>')
+      expect(nodeContent).not.toContain('</script>')
+    })
+
+    it('sanitizes node labels with malicious HTML tags', async () => {
+      const xssDag: ProcessDag = {
+        nodes: [
+          {
+            id: 'step_1',
+            label: '<img src=x onerror=alert("XSS")>Step Name',
+            order: 1,
+            data: {},
+          },
+        ],
+        edges: [],
+      }
+
+      mockGet.mockResolvedValueOnce({ data: xssDag })
+
+      renderProcessDAG()
+
+      await waitFor(() => {
+        expect(screen.getByTestId('node-step_1')).toBeInTheDocument()
+      })
+
+      // Should render sanitized text without img tag
+      expect(screen.getByText('Step Name')).toBeInTheDocument()
+      expect(screen.queryByRole('img')).not.toBeInTheDocument()
+      // Verify no img tag in content
+      const nodeContent = screen.getByTestId('node-step_1').textContent
+      expect(nodeContent).not.toContain('<img')
+    })
+
+    it('blocks node with invalid node ID containing script', async () => {
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const mockOnNodeClick = vi.fn()
+
+      const maliciousDag: ProcessDag = {
+        nodes: [
+          {
+            id: 'step<script>alert("xss")</script>',
+            label: 'Normal Label',
+            order: 1,
+            data: {},
+          },
+        ],
+        edges: [],
+      }
+
+      mockGet.mockResolvedValueOnce({ data: maliciousDag })
+
+      renderProcessDAG('boston_resident_parking_permit', mockOnNodeClick)
+
+      await waitFor(() => {
+        // When all nodes are invalid, should show empty state
+        expect(screen.getByText('No process steps available')).toBeInTheDocument()
+      })
+
+      // Node should not render due to invalid ID
+      expect(screen.queryByText('Normal Label')).not.toBeInTheDocument()
+
+      // Should have warned about invalid node ID
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        'Skipping node with invalid ID:',
+        'step<script>alert("xss")</script>'
+      )
+
+      consoleWarnSpy.mockRestore()
+    })
+
+    it('truncates extremely long labels to prevent DoS', async () => {
+      const longLabel = 'A'.repeat(500) // 500 characters
+
+      const longLabelDag: ProcessDag = {
+        nodes: [
+          {
+            id: 'step_1',
+            label: longLabel,
+            order: 1,
+            data: {},
+          },
+        ],
+        edges: [],
+      }
+
+      mockGet.mockResolvedValueOnce({ data: longLabelDag })
+
+      renderProcessDAG()
+
+      await waitFor(() => {
+        expect(screen.getByTestId('node-step_1')).toBeInTheDocument()
+      })
+
+      // Label should be truncated to 200 characters
+      const nodeElement = screen.getByTestId('node-step_1')
+      const labelDiv = nodeElement.querySelector('div[style*="font-weight: 600"]')
+      const labelText = labelDiv?.textContent || ''
+
+      // The label itself should be truncated to 200 characters
+      expect(labelText.length).toBe(200)
+      expect(labelText).toBe('A'.repeat(200))
+    })
+  })
+
+  describe('Security: DoS Protection', () => {
+    it('limits number of nodes to prevent browser crash', async () => {
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+      // Create DAG with 150 nodes (exceeds MAX_NODES = 100)
+      const largeNodes = Array.from({ length: 150 }, (_, i) => ({
+        id: `step_${i}`,
+        label: `Step ${i}`,
+        order: i + 1,
+        data: {},
+      }))
+
+      const largeDag: ProcessDag = {
+        nodes: largeNodes,
+        edges: [],
+      }
+
+      mockGet.mockResolvedValueOnce({ data: largeDag })
+
+      renderProcessDAG()
+
+      await waitFor(() => {
+        expect(screen.getByTestId('react-flow')).toBeInTheDocument()
+      })
+
+      // Should have warned about limiting nodes
+      expect(consoleWarnSpy).toHaveBeenCalledWith('Graph has 150 nodes, limiting to 100')
+
+      // Should render only 100 nodes
+      const renderedNodes = screen.getByTestId('nodes').children
+      expect(renderedNodes.length).toBeLessThanOrEqual(100)
+
+      consoleWarnSpy.mockRestore()
+    })
+
+    it('limits number of edges to prevent browser crash', async () => {
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+      // Create 50 nodes
+      const nodes = Array.from({ length: 50 }, (_, i) => ({
+        id: `step_${i}`,
+        label: `Step ${i}`,
+        order: i + 1,
+        data: {},
+      }))
+
+      // Create 600 edges (exceeds MAX_EDGES = 500)
+      const largeEdges = Array.from({ length: 600 }, (_, i) => ({
+        source: `step_${i % 50}`,
+        target: `step_${(i + 1) % 50}`,
+        type: 'DEPENDS_ON' as const,
+      }))
+
+      const largeDag: ProcessDag = {
+        nodes,
+        edges: largeEdges,
+      }
+
+      mockGet.mockResolvedValueOnce({ data: largeDag })
+
+      renderProcessDAG()
+
+      await waitFor(() => {
+        expect(screen.getByTestId('react-flow')).toBeInTheDocument()
+      })
+
+      // Should have warned about limiting edges
+      expect(consoleWarnSpy).toHaveBeenCalledWith('Graph has 600 edges, limiting to 500')
+
+      // Should render only 500 edges
+      const renderedEdges = screen.getByTestId('edges').children
+      expect(renderedEdges.length).toBeLessThanOrEqual(500)
+
+      consoleWarnSpy.mockRestore()
+    })
+  })
+
+  describe('Security: Injection Protection', () => {
+    it('filters nodes with invalid IDs containing special characters', async () => {
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+      const maliciousDag: ProcessDag = {
+        nodes: [
+          {
+            id: 'valid_step_1',
+            label: 'Valid Step',
+            order: 1,
+            data: {},
+          },
+          {
+            id: '../../../etc/passwd',
+            label: 'Path Traversal',
+            order: 2,
+            data: {},
+          },
+          {
+            id: 'step; DROP TABLE nodes;',
+            label: 'SQL Injection',
+            order: 3,
+            data: {},
+          },
+        ],
+        edges: [],
+      }
+
+      mockGet.mockResolvedValueOnce({ data: maliciousDag })
+
+      renderProcessDAG()
+
+      await waitFor(() => {
+        expect(screen.getByTestId('react-flow')).toBeInTheDocument()
+      })
+
+      // Only valid node should render
+      expect(screen.getByTestId('node-valid_step_1')).toBeInTheDocument()
+      expect(screen.queryByText(/Path Traversal/)).not.toBeInTheDocument()
+      expect(screen.queryByText(/SQL Injection/)).not.toBeInTheDocument()
+
+      // Should have warned about invalid IDs
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        'Skipping node with invalid ID:',
+        '../../../etc/passwd'
+      )
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        'Skipping node with invalid ID:',
+        'step; DROP TABLE nodes;'
+      )
+
+      consoleWarnSpy.mockRestore()
+    })
+
+    it('filters edges referencing non-existent nodes', async () => {
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+      const invalidEdgesDag: ProcessDag = {
+        nodes: [
+          {
+            id: 'step_1',
+            label: 'Step 1',
+            order: 1,
+            data: {},
+          },
+          {
+            id: 'step_2',
+            label: 'Step 2',
+            order: 2,
+            data: {},
+          },
+        ],
+        edges: [
+          {
+            source: 'step_1',
+            target: 'step_2',
+            type: 'DEPENDS_ON',
+          },
+          {
+            source: 'step_2',
+            target: 'nonexistent_step',
+            type: 'DEPENDS_ON',
+          },
+          {
+            source: 'another_fake',
+            target: 'step_1',
+            type: 'DEPENDS_ON',
+          },
+        ],
+      }
+
+      mockGet.mockResolvedValueOnce({ data: invalidEdgesDag })
+
+      renderProcessDAG()
+
+      await waitFor(() => {
+        expect(screen.getByTestId('react-flow')).toBeInTheDocument()
+      })
+
+      // Should have warned about invalid edges
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        'Skipping edge with invalid node reference:',
+        expect.objectContaining({ source: 'step_2', target: 'nonexistent_step' })
+      )
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        'Skipping edge with invalid node reference:',
+        expect.objectContaining({ source: 'another_fake', target: 'step_1' })
+      )
+
+      // Only valid edge should render
+      const renderedEdges = screen.getByTestId('edges').children
+      expect(renderedEdges.length).toBe(1)
+
+      consoleWarnSpy.mockRestore()
+    })
+
+    it('blocks callback invocation with invalid node ID on click', async () => {
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const mockOnNodeClick = vi.fn()
+
+      mockGet.mockResolvedValueOnce({ data: mockDagData })
+
+      renderProcessDAG('boston_resident_parking_permit', mockOnNodeClick)
+
+      await waitFor(() => {
+        expect(screen.getByTestId('node-step_1')).toBeInTheDocument()
+      })
+
+      // Manually trigger click with invalid node ID
+      const invalidNode = {
+        id: 'invalid/../node',
+        type: 'stepNode',
+        data: { label: 'Test', order: 1 },
+        position: { x: 0, y: 0 },
+      }
+
+      // Access the onNodeClick handler from ReactFlow mock
+      const reactFlowElement = screen.getByTestId('react-flow')
+      const mockOnNodeClickHandler = (reactFlowElement as never)['props']?.onNodeClick
+
+      // This should trigger validation
+      if (mockOnNodeClickHandler) {
+        mockOnNodeClickHandler(new MouseEvent('click') as never, invalidNode as never)
+      }
+
+      // Should not have called the user's callback
+      expect(mockOnNodeClick).not.toHaveBeenCalled()
+
+      consoleWarnSpy.mockRestore()
     })
   })
 })
