@@ -1,11 +1,11 @@
-import { describe, it, expect, vi, beforeAll, afterEach, afterAll } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { http, HttpResponse } from 'msw'
-import { setupServer } from 'msw/node'
+import type { AxiosResponse } from 'axios'
 import { DocumentUpload } from '../src/components/DocumentUpload'
 import type { DocumentUploadResponse } from '../src/types/api'
+import * as api from '../src/lib/api'
 
 /**
  * Test suite for DocumentUpload component.
@@ -20,10 +20,11 @@ import type { DocumentUploadResponse } from '../src/types/api'
  * - Citation display in validation results
  * - Accessibility (ARIA labels, keyboard navigation)
  * - Progress indicator during upload
+ *
+ * Note: This suite mocks axios directly instead of using MSW to avoid
+ * axios/MSW/Vitest integration issues. The apiClient.post method is mocked
+ * to return controlled responses for each test scenario.
  */
-
-// Mock API base URL
-const API_BASE_URL = 'http://localhost:8000/api'
 
 // Create test files
 const createTestFile = (name: string, size: number, type: string): File => {
@@ -96,31 +97,15 @@ const mockFailureResponse: DocumentUploadResponse = {
   },
 }
 
-// Setup MSW server
-const server = setupServer(
-  http.post(`${API_BASE_URL}/documents/upload`, async ({ request }) => {
-    console.log('[MSW] Intercepted upload request:', request.url)
-    // Add small delay to ensure async processing
-    await new Promise((resolve) => setTimeout(resolve, 100))
-    console.log('[MSW] Returning response after delay')
-    return HttpResponse.json(mockSuccessResponse, { status: 200 })
-  })
-)
-
-// Start server before all tests
-beforeAll(() => {
-  server.listen({ onUnhandledRequest: 'warn' })
-  console.log('[Test Setup] MSW server started')
+// Mock apiClient.post before each test
+beforeEach(() => {
+  // Clear all mocks before each test
+  vi.clearAllMocks()
 })
 
-// Reset handlers after each test
+// Reset mocks after each test
 afterEach(() => {
-  server.resetHandlers()
-})
-
-// Close server after all tests
-afterAll(() => {
-  server.close()
+  vi.restoreAllMocks()
 })
 
 // Helper to render component with QueryClient
@@ -318,6 +303,16 @@ describe('DocumentUpload', () => {
 
   describe('Upload Functionality', () => {
     it('should upload file successfully and show validation result', async () => {
+      // Mock apiClient.post with a small delay to allow checking upload state
+      vi.spyOn(api.apiClient, 'post').mockImplementation(
+        () =>
+          new Promise<AxiosResponse<DocumentUploadResponse>>((resolve) => {
+            setTimeout(() => {
+              resolve({ data: mockSuccessResponse } as AxiosResponse<DocumentUploadResponse>)
+            }, 100)
+          })
+      )
+
       const user = userEvent.setup()
       const onSuccess = vi.fn()
       renderWithQueryClient(
@@ -354,15 +349,12 @@ describe('DocumentUpload', () => {
     })
 
     it('should show validation failure with citations', async () => {
+      // Mock apiClient.post to return failure response
+      vi.spyOn(api.apiClient, 'post').mockResolvedValue({
+        data: mockFailureResponse,
+      } as AxiosResponse<DocumentUploadResponse>)
+
       const user = userEvent.setup()
-
-      // Mock failure response
-      server.use(
-        http.post(`${API_BASE_URL}/documents/upload`, async () => {
-          return HttpResponse.json(mockFailureResponse)
-        })
-      )
-
       renderWithQueryClient(<DocumentUpload documentType="proof_of_residency" />)
 
       const file = createTestFile('test.jpg', 1024, 'image/jpeg')
@@ -393,19 +385,25 @@ describe('DocumentUpload', () => {
     })
 
     it('should handle upload error', async () => {
+      // Mock apiClient.post to reject with properly structured error
+      // The error needs to pass through the API client's error interceptor
+      const mockError = Object.assign(new Error('Request failed with status code 500'), {
+        response: {
+          status: 500,
+          data: { detail: 'Upload failed: Server error' },
+          config: {},
+        },
+        config: {},
+        isAxiosError: true,
+        toJSON: () => ({}),
+        userMessage: 'Upload failed: Server error',
+        isNetworkError: false,
+        statusCode: 500,
+      })
+      vi.spyOn(api.apiClient, 'post').mockRejectedValue(mockError)
+
       const user = userEvent.setup()
       const onError = vi.fn()
-
-      // Mock error response
-      server.use(
-        http.post(`${API_BASE_URL}/documents/upload`, async () => {
-          return HttpResponse.json(
-            { detail: 'Upload failed: Server error' },
-            { status: 500 }
-          )
-        })
-      )
-
       renderWithQueryClient(
         <DocumentUpload documentType="proof_of_residency" onUploadError={onError} />
       )
@@ -431,16 +429,17 @@ describe('DocumentUpload', () => {
     })
 
     it('should prevent upload while request is pending', async () => {
-      const user = userEvent.setup()
-
-      // Mock delayed response
-      server.use(
-        http.post(`${API_BASE_URL}/documents/upload`, async () => {
-          await new Promise((resolve) => setTimeout(resolve, 1000))
-          return HttpResponse.json(mockSuccessResponse)
-        })
+      // Mock apiClient.post with delayed response
+      vi.spyOn(api.apiClient, 'post').mockImplementation(
+        () =>
+          new Promise<AxiosResponse<DocumentUploadResponse>>((resolve) => {
+            setTimeout(() => {
+              resolve({ data: mockSuccessResponse } as AxiosResponse<DocumentUploadResponse>)
+            }, 1000)
+          })
       )
 
+      const user = userEvent.setup()
       renderWithQueryClient(<DocumentUpload documentType="proof_of_residency" />)
 
       const file = createTestFile('test.pdf', 1024, 'application/pdf')
@@ -525,6 +524,11 @@ describe('DocumentUpload', () => {
     })
 
     it('should clear upload result when selecting new file', async () => {
+      // Mock apiClient.post to return success response
+      vi.spyOn(api.apiClient, 'post').mockResolvedValue({
+        data: mockSuccessResponse,
+      } as AxiosResponse<DocumentUploadResponse>)
+
       const user = userEvent.setup()
       renderWithQueryClient(<DocumentUpload documentType="proof_of_residency" />)
 
@@ -582,6 +586,16 @@ describe('DocumentUpload', () => {
     })
 
     it('should announce upload status to screen readers', async () => {
+      // Mock apiClient.post with delayed response
+      vi.spyOn(api.apiClient, 'post').mockImplementation(
+        () =>
+          new Promise<AxiosResponse<DocumentUploadResponse>>((resolve) => {
+            setTimeout(() => {
+              resolve({ data: mockSuccessResponse } as AxiosResponse<DocumentUploadResponse>)
+            }, 100)
+          })
+      )
+
       const user = userEvent.setup()
       renderWithQueryClient(<DocumentUpload documentType="proof_of_residency" />)
 
@@ -624,14 +638,12 @@ describe('DocumentUpload', () => {
 
   describe('Citation Links', () => {
     it('should render citation links with proper attributes', async () => {
+      // Mock apiClient.post to return success response
+      vi.spyOn(api.apiClient, 'post').mockResolvedValue({
+        data: mockSuccessResponse,
+      } as AxiosResponse<DocumentUploadResponse>)
+
       const user = userEvent.setup()
-
-      server.use(
-        http.post(`${API_BASE_URL}/documents/upload`, async () => {
-          return HttpResponse.json(mockSuccessResponse)
-        })
-      )
-
       renderWithQueryClient(<DocumentUpload documentType="proof_of_residency" />)
 
       const file = createTestFile('test.pdf', 1024, 'application/pdf')
@@ -654,14 +666,12 @@ describe('DocumentUpload', () => {
     })
 
     it('should display citation sources list', async () => {
+      // Mock apiClient.post to return failure response with citations
+      vi.spyOn(api.apiClient, 'post').mockResolvedValue({
+        data: mockFailureResponse,
+      } as AxiosResponse<DocumentUploadResponse>)
+
       const user = userEvent.setup()
-
-      server.use(
-        http.post(`${API_BASE_URL}/documents/upload`, async () => {
-          return HttpResponse.json(mockFailureResponse)
-        })
-      )
-
       renderWithQueryClient(<DocumentUpload documentType="proof_of_residency" />)
 
       const file = createTestFile('test.pdf', 1024, 'application/pdf')
@@ -706,22 +716,19 @@ describe('DocumentUpload', () => {
     })
 
     it('should prevent XSS in validation messages', async () => {
+      // Mock apiClient.post with potential XSS in message
+      vi.spyOn(api.apiClient, 'post').mockResolvedValue({
+        data: {
+          ...mockFailureResponse,
+          validation_result: {
+            passed: false,
+            message: '<script>alert("xss")</script>Invalid document',
+            citations: [],
+          },
+        },
+      } as AxiosResponse<DocumentUploadResponse>)
+
       const user = userEvent.setup()
-
-      // Mock response with potential XSS in message
-      server.use(
-        http.post(`${API_BASE_URL}/documents/upload`, async () => {
-          return HttpResponse.json({
-            ...mockFailureResponse,
-            validation_result: {
-              passed: false,
-              message: '<script>alert("xss")</script>Invalid document',
-              citations: [],
-            },
-          })
-        })
-      )
-
       renderWithQueryClient(<DocumentUpload documentType="proof_of_residency" />)
 
       const file = createTestFile('test.pdf', 1024, 'application/pdf')
