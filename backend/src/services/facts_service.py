@@ -103,8 +103,31 @@ class FactsService:
 
         Returns:
             Path to the registry YAML file
+
+        Raises:
+            FactsServiceError: If registry name contains invalid characters
         """
-        return self.facts_dir / f"{registry_name}.yaml"
+        # Validate registry name doesn't contain path traversal
+        if ".." in registry_name or "/" in registry_name or "\\" in registry_name:
+            raise FactsServiceError(
+                f"Invalid registry name '{registry_name}': "
+                f"registry names cannot contain '..' or path separators"
+            )
+
+        registry_path = self.facts_dir / f"{registry_name}.yaml"
+
+        # Ensure resolved path is within facts_dir (defense in depth)
+        try:
+            resolved_path = registry_path.resolve()
+            resolved_facts_dir = self.facts_dir.resolve()
+            if not str(resolved_path).startswith(str(resolved_facts_dir)):
+                raise FactsServiceError(f"Invalid registry path for '{registry_name}'")
+        except FactsServiceError:
+            raise
+        except Exception as e:
+            raise FactsServiceError(f"Invalid registry name '{registry_name}': {str(e)}") from e
+
+        return registry_path
 
     def load_registry(self, registry_name: str) -> FactsRegistry:
         """
@@ -136,24 +159,26 @@ class FactsService:
             registry_path = self._get_registry_path(registry_name)
 
             if not registry_path.exists():
-                raise RegistryNotFoundError(f"Registry file not found: {registry_path}")
+                raise RegistryNotFoundError(f"Registry '{registry_name}' not found")
 
             try:
                 with open(registry_path) as f:
                     data = yaml.safe_load(f)
             except yaml.YAMLError as e:
                 logger.error(f"Failed to parse YAML file {registry_path}: {e}")
-                raise RegistryParseError(f"Failed to parse registry YAML: {e}") from e
+                raise RegistryParseError(f"Failed to parse registry '{registry_name}': {e}") from e
             except Exception as e:
                 logger.error(f"Failed to read file {registry_path}: {e}")
-                raise RegistryParseError(f"Failed to read registry file: {e}") from e
+                raise RegistryParseError(f"Failed to read registry '{registry_name}': {e}") from e
 
             # Validate with Pydantic
             try:
                 registry = FactsRegistry(**data)
             except ValidationError as e:
                 logger.error(f"Registry validation failed for {registry_name}: {e}")
-                raise RegistryValidationError(f"Registry validation failed: {e}") from e
+                raise RegistryValidationError(
+                    f"Registry validation failed for '{registry_name}': {e}"
+                ) from e
 
             # Cache and return
             self._cache[registry_name] = registry

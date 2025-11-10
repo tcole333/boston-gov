@@ -601,3 +601,51 @@ def test_confidence_levels(facts_service, temp_facts_dir):
     assert registry.facts[0].confidence == ConfidenceLevel.HIGH
     assert registry.facts[1].confidence == ConfidenceLevel.MEDIUM
     assert registry.facts[2].confidence == ConfidenceLevel.LOW
+
+
+# ==================== Security Validation Tests ====================
+
+
+class TestSecurityValidation:
+    """Test security-related validations."""
+
+    def test_path_traversal_with_double_dots(self, temp_facts_dir) -> None:
+        """Test that path traversal with .. is blocked."""
+        service = FactsService(temp_facts_dir)
+
+        with pytest.raises(FactsServiceError) as exc_info:
+            service.load_registry("../../../etc/passwd")
+
+        assert "Invalid registry name" in str(exc_info.value)
+        assert "cannot contain" in str(exc_info.value)
+
+    def test_path_traversal_with_forward_slash(self, temp_facts_dir) -> None:
+        """Test that path traversal with / is blocked."""
+        service = FactsService(temp_facts_dir)
+
+        with pytest.raises(FactsServiceError) as exc_info:
+            service.load_registry("subdir/registry")
+
+        assert "Invalid registry name" in str(exc_info.value)
+
+    def test_path_traversal_with_backslash(self, temp_facts_dir) -> None:
+        """Test that path traversal with \\ is blocked."""
+        service = FactsService(temp_facts_dir)
+
+        with pytest.raises(FactsServiceError) as exc_info:
+            service.load_registry("subdir\\registry")
+
+        assert "Invalid registry name" in str(exc_info.value)
+
+    def test_error_message_sanitization_not_found(self, temp_facts_dir) -> None:
+        """Test that error messages don't expose full filesystem paths."""
+        service = FactsService(temp_facts_dir)
+
+        with pytest.raises(RegistryNotFoundError) as exc_info:
+            service.load_registry("nonexistent")
+
+        error_msg = str(exc_info.value)
+        # Should NOT contain full path
+        assert str(temp_facts_dir) not in error_msg
+        # Should contain registry name
+        assert "nonexistent" in error_msg
