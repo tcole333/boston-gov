@@ -238,10 +238,15 @@ Remember: Your primary value is providing **cited, traceable, accurate** informa
                 raise ConversationAgentError(f"Unknown tool: {tool_name}")
         except Exception as e:
             logger.error(f"Tool execution failed for {tool_name}: {e}")
+            # Sanitize error message to avoid leaking internal details to LLM
+            sanitized_message = (
+                "Tool execution failed due to an internal error. "
+                "Please try rephrasing your query or contact support if the issue persists."
+            )
             return {
-                "error": str(e),
+                "error": "internal_error",
                 "tool": tool_name,
-                "message": f"Failed to execute {tool_name}: {str(e)}",
+                "message": sanitized_message,
             }
 
     async def _execute_graph_query(self, tool_input: dict[str, Any]) -> dict[str, Any]:
@@ -254,34 +259,50 @@ Remember: Your primary value is providing **cited, traceable, accurate** informa
         Returns:
             Dictionary with query results
         """
-        query_type = tool_input["query_type"]
+        query_type = tool_input.get("query_type")
+        if not query_type:
+            return {"error": "Missing required parameter: query_type"}
 
         if query_type == "get_process":
-            process = await self.graph_service.get_process_by_id(tool_input["process_id"])
+            process_id = tool_input.get("process_id")
+            if not process_id:
+                return {"error": "Missing required parameter: process_id"}
+            process = await self.graph_service.get_process_by_id(process_id)
             return {"process": process.model_dump() if process else None}
 
         elif query_type == "get_process_steps":
-            steps = await self.graph_service.get_process_steps(tool_input["process_id"])
+            process_id = tool_input.get("process_id")
+            if not process_id:
+                return {"error": "Missing required parameter: process_id"}
+            steps = await self.graph_service.get_process_steps(process_id)
             return {"steps": [step.model_dump() for step in steps]}
 
         elif query_type == "get_process_requirements":
-            requirements = await self.graph_service.get_process_requirements(
-                tool_input["process_id"]
-            )
+            process_id = tool_input.get("process_id")
+            if not process_id:
+                return {"error": "Missing required parameter: process_id"}
+            requirements = await self.graph_service.get_process_requirements(process_id)
             return {"requirements": [req.model_dump() for req in requirements]}
 
         elif query_type == "get_step_office":
-            office = await self.graph_service.get_step_office(tool_input["step_id"])
+            step_id = tool_input.get("step_id")
+            if not step_id:
+                return {"error": "Missing required parameter: step_id"}
+            office = await self.graph_service.get_step_office(step_id)
             return {"office": office.model_dump() if office else None}
 
         elif query_type == "get_step_documents":
-            docs = await self.graph_service.get_step_document_types(tool_input["step_id"])
+            step_id = tool_input.get("step_id")
+            if not step_id:
+                return {"error": "Missing required parameter: step_id"}
+            docs = await self.graph_service.get_step_document_types(step_id)
             return {"documents": [doc.model_dump() for doc in docs]}
 
         elif query_type == "get_requirement_documents":
-            docs = await self.graph_service.get_requirement_document_types(
-                tool_input["requirement_id"]
-            )
+            requirement_id = tool_input.get("requirement_id")
+            if not requirement_id:
+                return {"error": "Missing required parameter: requirement_id"}
+            docs = await self.graph_service.get_requirement_document_types(requirement_id)
             return {"documents": [doc.model_dump() for doc in docs]}
 
         else:
@@ -297,14 +318,22 @@ Remember: Your primary value is providing **cited, traceable, accurate** informa
         Returns:
             Dictionary with query results
         """
-        query_type = tool_input["query_type"]
+        query_type = tool_input.get("query_type")
+        if not query_type:
+            return {"error": "Missing required parameter: query_type"}
 
         if query_type == "by_id":
-            fact = self.facts_service.get_fact_by_id(tool_input["fact_id"])
+            fact_id = tool_input.get("fact_id")
+            if not fact_id:
+                return {"error": "Missing required parameter: fact_id"}
+            fact = self.facts_service.get_fact_by_id(fact_id)
             return {"fact": fact.model_dump() if fact else None}
 
         elif query_type == "by_prefix":
-            facts = self.facts_service.get_facts_by_prefix(tool_input["prefix"])
+            prefix = tool_input.get("prefix")
+            if not prefix:
+                return {"error": "Missing required parameter: prefix"}
+            facts = self.facts_service.get_facts_by_prefix(prefix)
             return {"facts": [fact.model_dump() for fact in facts]}
 
         elif query_type == "all":
@@ -338,7 +367,11 @@ Remember: Your primary value is providing **cited, traceable, accurate** informa
             if "fact" in result and result["fact"]:
                 fact_data = result["fact"]
                 fact_id = fact_data.get("id")
-                if fact_id and fact_id not in seen_fact_ids:
+                # Validate required fields exist
+                if not fact_id or "source_url" not in fact_data or "text" not in fact_data:
+                    logger.warning(f"Skipping malformed fact data: {fact_data}")
+                    continue
+                if fact_id not in seen_fact_ids:
                     citations.append(
                         Citation(
                             fact_id=fact_id,
@@ -352,7 +385,11 @@ Remember: Your primary value is providing **cited, traceable, accurate** informa
             elif "facts" in result and result["facts"]:
                 for fact_data in result["facts"]:
                     fact_id = fact_data.get("id")
-                    if fact_id and fact_id not in seen_fact_ids:
+                    # Validate required fields exist
+                    if not fact_id or "source_url" not in fact_data or "text" not in fact_data:
+                        logger.warning(f"Skipping malformed fact data: {fact_data}")
+                        continue
+                    if fact_id not in seen_fact_ids:
                         citations.append(
                             Citation(
                                 fact_id=fact_id,
@@ -382,6 +419,7 @@ Remember: Your primary value is providing **cited, traceable, accurate** informa
 
         Raises:
             ConversationAgentError: If the agent fails to generate a response
+            ValueError: If question is empty or max_iterations is out of range
 
         Examples:
             ```python
@@ -390,6 +428,17 @@ Remember: Your primary value is providing **cited, traceable, accurate** informa
             # Output: "To be eligible for a resident parking permit, you must..."
             ```
         """
+        # Validate question
+        if not question or not question.strip():
+            raise ValueError("Question cannot be empty")
+        if len(question) > 10000:
+            raise ValueError("Question exceeds maximum length of 10000 characters")
+        question = question.strip()
+
+        # Validate max_iterations
+        if not isinstance(max_iterations, int) or max_iterations < 1 or max_iterations > 20:
+            raise ValueError("max_iterations must be an integer between 1 and 20")
+
         try:
             tools = self._define_tools()
             messages: list[MessageParam] = [{"role": "user", "content": question}]
