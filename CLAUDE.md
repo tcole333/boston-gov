@@ -17,6 +17,7 @@
 2. If PRD and Issues conflict, prefer an Issue labeled `decision`. Otherwise, open a new `decision` Issue and stop.
 3. For any **regulatory claim**, attach `source_url`, `source_section` (if available), `last_verified (YYYY‑MM‑DD)`, and `confidence`.
 4. **Do not** persist chain‑of‑thought; commit only verifiable facts, code, or tests.
+5. **Be proactive:** Flag issues in requirements, documentation, previous work, or failing tests. Raise concerns early rather than proceeding with unclear or problematic specifications.
 
 ## Retrieval Order (deterministic)
 1. Milestone → Issues (`plan`, `status`, `decision`)
