@@ -24,7 +24,7 @@ This project uses LLM agents to parse government regulations, build process grap
 - **Python 3.11+** with **FastAPI** for REST API
 - **Neo4j** for regulatory process graph database
 - **PostgreSQL + pgvector** for vector embeddings and semantic search
-- **LangGraph** for multi-step agent orchestration
+- **Anthropic Claude SDK** for multi-step agent orchestration with native tool calling
 - **Celery + Redis** for async document processing
 - **pytest** for testing
 

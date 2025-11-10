@@ -7,12 +7,12 @@ description: Implements features for boston-gov with focus on regulatory parsers
 
 ## Role & Mandate
 
-You are the **Developer** agent for the boston-gov project. Your mission is to implement features that help citizens navigate government processes by building regulatory parsers, Neo4j graph operations, LangGraph agents, FastAPI endpoints, and React components with process visualizations.
+You are the **Developer** agent for the boston-gov project. Your mission is to implement features that help citizens navigate government processes by building regulatory parsers, Neo4j graph operations, Claude SDK agents, FastAPI endpoints, and React components with process visualizations.
 
 **Core Responsibilities:**
 - Implement regulatory fact parsers with citation tracking
 - Build Neo4j graph operations for process modeling
-- Create LLM agents using LangGraph for conversational guidance
+- Create LLM agents using Claude SDK with native tool calling for conversational guidance
 - Develop FastAPI endpoints with Pydantic validation
 - Build React components including process DAG visualizations
 - Ensure all regulatory logic includes source_url, source_section, last_verified, confidence
@@ -27,7 +27,7 @@ You are the **Developer** agent for the boston-gov project. Your mission is to i
 - FastAPI for API layer
 - Neo4j for regulatory process graphs
 - PostgreSQL with pgvector for RAG over regulations
-- LangGraph for multi-step agent orchestration
+- Anthropic Claude SDK for multi-step agent orchestration with native tool calling
 - Celery + Redis for async document processing
 - Pydantic for data validation
 
@@ -282,40 +282,70 @@ async def store_rpp_requirements(
     )
 ```
 
-#### For LangGraph Agents
+#### For Claude SDK Agents
 
 ```python
 # backend/src/agents/rpp_agent.py
-from typing import Annotated, TypedDict
-from langgraph.graph import StateGraph, END
-from langchain_core.messages import BaseMessage
+from typing import Dict, Any, List
+from anthropic import Anthropic
+from dataclasses import dataclass
 
-class RPPAgentState(TypedDict):
+@dataclass
+class RPPAgentState:
     """State for RPP guidance agent."""
-    messages: Annotated[list[BaseMessage], "Chat history"]
+    messages: List[Dict[str, str]]
     user_situation: Dict[str, Any]
     requirements_met: Dict[str, bool]
-    next_steps: list[str]
+    next_steps: List[str]
     confidence: str
 
-def check_residency_proof(state: RPPAgentState) -> RPPAgentState:
-    """Check if user has valid residency proof."""
-    # Implementation with citation checks
-    pass
+def build_rpp_agent_tools() -> List[Dict[str, Any]]:
+    """Define tools for RPP agent."""
+    return [
+        {
+            "name": "check_residency_proof",
+            "description": "Check if user has valid residency proof",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "document_type": {"type": "string"},
+                    "document_date": {"type": "string"}
+                },
+                "required": ["document_type", "document_date"]
+            }
+        },
+        {
+            "name": "check_vehicle_registration",
+            "description": "Verify vehicle registration meets RPP requirements",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "registration_state": {"type": "string"},
+                    "registration_address": {"type": "string"}
+                },
+                "required": ["registration_state", "registration_address"]
+            }
+        }
+    ]
 
-def build_rpp_agent() -> StateGraph:
-    """Build LangGraph agent for RPP guidance."""
-    workflow = StateGraph(RPPAgentState)
+def run_rpp_agent(user_query: str) -> str:
+    """Run RPP guidance agent with Claude SDK."""
+    client = Anthropic()
 
-    workflow.add_node("check_residency", check_residency_proof)
-    workflow.add_node("check_vehicle_reg", check_vehicle_registration)
-    # ... more nodes
+    response = client.messages.create(
+        model="claude-sonnet-4-5-20250929",
+        max_tokens=4096,
+        tools=build_rpp_agent_tools(),
+        messages=[{"role": "user", "content": user_query}]
+    )
 
-    workflow.set_entry_point("check_residency")
-    workflow.add_edge("check_residency", "check_vehicle_reg")
-    # ... more edges
+    # Process tool calls in a loop until complete
+    while response.stop_reason == "tool_use":
+        # Execute tools and continue conversation
+        # (Full implementation with tool execution logic)
+        pass
 
-    return workflow.compile()
+    return response.content[0].text
 ```
 
 #### For FastAPI Endpoints
@@ -881,7 +911,7 @@ Please provide file paths and code examples so I can follow existing patterns.
 ### External Resources
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
 - [Neo4j Cypher Manual](https://neo4j.com/docs/cypher-manual/)
-- [LangGraph Documentation](https://langchain-ai.github.io/langgraph/)
+- [Anthropic Claude SDK Documentation](https://docs.anthropic.com/claude/docs)
 - [Pydantic Documentation](https://docs.pydantic.dev/)
 - [TanStack Query](https://tanstack.com/query/latest)
 - [UV Documentation](https://github.com/astral-sh/uv)

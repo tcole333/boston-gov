@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Planned
 - Boston Resident Parking Permit (RPP) process implementation
-- LangGraph agent for conversational guidance
+- Claude SDK agent for conversational guidance with native tool calling
 - Neo4j graph database schema for process mapping
 - Vector store integration for regulatory document retrieval
 - FastAPI backend with chat endpoints
@@ -47,7 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Frontend**: React + TypeScript with Vite build tool
 - **Graph DB**: Neo4j for regulatory process graph
 - **Vector Store**: Pinecone (with pgvector as alternative)
-- **Agent Framework**: LangGraph for multi-step agent orchestration
+- **Agent Framework**: Anthropic Claude SDK for multi-step agent orchestration with native tool calling
 - **Task Queue**: Celery + Redis for async processing
 - **Testing**: pytest (backend), Vitest (frontend)
 - **Code Quality**: Ruff + mypy (Python), ESLint + Prettier (TypeScript)
