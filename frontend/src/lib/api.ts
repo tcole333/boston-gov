@@ -50,6 +50,17 @@ const ERROR_MESSAGES: Record<string, string> = {
 }
 
 /**
+ * Sanitize error messages from backend to prevent XSS attacks.
+ * Strips HTML tags and limits length to prevent abuse.
+ */
+const sanitizeErrorMessage = (message: string): string => {
+  return message
+    .replace(/<[^>]*>/g, '') // Remove HTML tags
+    .substring(0, 500) // Limit length
+    .trim()
+}
+
+/**
  * Extract user-friendly error message from API error.
  */
 const getErrorMessage = (error: AxiosError<ApiError>): string => {
@@ -61,9 +72,9 @@ const getErrorMessage = (error: AxiosError<ApiError>): string => {
     return ERROR_MESSAGES.NETWORK_ERROR as string
   }
 
-  // Use backend error message if available
+  // Use backend error message if available (sanitized to prevent XSS)
   if (error.response.data?.detail) {
-    return error.response.data.detail
+    return sanitizeErrorMessage(error.response.data.detail)
   }
 
   // Fallback to status code messages
@@ -118,7 +129,9 @@ const createApiClient = (): AxiosInstance => {
       return config
     },
     (error: AxiosError) => {
-      console.error('[API Request Error]', error)
+      if (import.meta.env.DEV) {
+        console.error('[API Request Error]', error)
+      }
       return Promise.reject(error)
     }
   )

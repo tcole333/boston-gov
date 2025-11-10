@@ -44,10 +44,6 @@ vi.mock('axios', () => {
 })
 
 describe('API Client', () => {
-  let apiClient: any
-  let isApiClientError: any
-  let getApiErrorMessage: any
-
   // Helper to get error interceptor from mock
   const getErrorInterceptor = () => {
     return (mockAxiosInstance.interceptors.response.use as any).mock.calls[0]?.[1]
@@ -56,10 +52,7 @@ describe('API Client', () => {
   beforeEach(async () => {
     vi.clearAllMocks()
     // Dynamically import the module after mocks are set up
-    const module = await import('../api')
-    apiClient = module.apiClient
-    isApiClientError = module.isApiClientError
-    getApiErrorMessage = module.getApiErrorMessage
+    await import('../api')
   })
 
   afterEach(() => {
