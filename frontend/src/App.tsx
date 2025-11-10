@@ -1,5 +1,5 @@
-import { useState } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import ChatInterface from './components/ChatInterface'
 
 /**
  * React Query client configuration.
@@ -33,8 +33,6 @@ const queryClient = new QueryClient({
 })
 
 const App = () => {
-  const [count, setCount] = useState(0)
-
   return (
     <QueryClientProvider client={queryClient}>
       <div
@@ -46,6 +44,7 @@ const App = () => {
           justifyContent: 'center',
           fontFamily: 'system-ui, -apple-system, sans-serif',
           padding: '2rem',
+          backgroundColor: '#f5f5f5',
         }}
       >
         <h1 style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>
@@ -55,30 +54,7 @@ const App = () => {
           Helping citizens navigate government services
         </p>
 
-        <div
-          style={{
-            padding: '2rem',
-            border: '1px solid #ddd',
-            borderRadius: '8px',
-            textAlign: 'center',
-          }}
-        >
-          <p style={{ marginBottom: '1rem' }}>Development server is running!</p>
-          <button
-            onClick={() => setCount((count) => count + 1)}
-            style={{
-              padding: '0.5rem 1rem',
-              fontSize: '1rem',
-              cursor: 'pointer',
-              backgroundColor: '#007bff',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-            }}
-          >
-            count is {count}
-          </button>
-        </div>
+        <ChatInterface />
 
         <p style={{ marginTop: '2rem', color: '#999', fontSize: '0.9rem' }}>
           Phase 1: Boston Resident Parking Permits (RPP)

@@ -9,47 +9,47 @@
  * Confidence score for regulatory claims.
  */
 export enum ConfidenceLevel {
-  HIGH = "high",
-  MEDIUM = "medium",
-  LOW = "low",
+  HIGH = 'high',
+  MEDIUM = 'medium',
+  LOW = 'low',
 }
 
 /**
  * Categories of government processes.
  */
 export enum ProcessCategory {
-  PERMITS = "permits",
-  LICENSES = "licenses",
-  BENEFITS = "benefits",
+  PERMITS = 'permits',
+  LICENSES = 'licenses',
+  BENEFITS = 'benefits',
 }
 
 /**
  * Types of web resources.
  */
 export enum WebResourceType {
-  HOW_TO = "how_to",
-  PROGRAM = "program",
-  PORTAL = "portal",
-  PDF_FORM = "pdf_form",
+  HOW_TO = 'how_to',
+  PROGRAM = 'program',
+  PORTAL = 'portal',
+  PDF_FORM = 'pdf_form',
 }
 
 /**
  * Status of a user application.
  */
 export enum ApplicationStatus {
-  PENDING = "pending",
-  APPROVED = "approved",
-  DENIED = "denied",
+  PENDING = 'pending',
+  APPROVED = 'approved',
+  DENIED = 'denied',
 }
 
 /**
  * Category of application.
  */
 export enum ApplicationCategory {
-  NEW = "new",
-  RENEWAL = "renewal",
-  REPLACEMENT = "replacement",
-  RENTAL = "rental",
+  NEW = 'new',
+  RENEWAL = 'renewal',
+  REPLACEMENT = 'replacement',
+  RENTAL = 'rental',
 }
 
 /**
