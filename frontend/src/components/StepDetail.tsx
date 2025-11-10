@@ -30,6 +30,21 @@ const isSafeUrl = (url: string): boolean => {
 }
 
 /**
+ * Validates that an ID has a safe format.
+ * Prevents injection attacks via malformed IDs.
+ *
+ * @param id - The ID to validate
+ * @returns true if the ID is valid, false otherwise
+ */
+const isValidId = (id: string): boolean => {
+  return /^[a-zA-Z0-9_-]{1,100}$/.test(id)
+}
+
+// DoS protection: Maximum number of items to render
+const MAX_REQUIREMENTS = 50
+const MAX_DOCUMENTS = 20
+
+/**
  * Sanitizes user-provided text to prevent XSS attacks.
  * Removes HTML tags, trims whitespace, and limits length.
  */
@@ -168,6 +183,9 @@ const LoadingSkeleton = (): JSX.Element => {
  * - Limits text length to prevent DoS attacks
  */
 export const StepDetail = ({ stepId, processId }: StepDetailProps): JSX.Element => {
+  // Validate IDs
+  const validIds = isValidId(stepId) && isValidId(processId)
+
   // Fetch step details
   const {
     data: step,
@@ -180,7 +198,7 @@ export const StepDetail = ({ stepId, processId }: StepDetailProps): JSX.Element 
       const response = await apiClient.get<Step>(`/processes/${processId}/steps/${stepId}`)
       return response.data
     },
-    enabled: Boolean(stepId && processId),
+    enabled: Boolean(stepId && processId && validIds),
   })
 
   // Fetch process requirements (we'll filter for this step if needed)
@@ -194,7 +212,7 @@ export const StepDetail = ({ stepId, processId }: StepDetailProps): JSX.Element 
       const response = await apiClient.get<Requirement[]>(`/processes/${processId}/requirements`)
       return response.data
     },
-    enabled: Boolean(processId),
+    enabled: Boolean(processId && validIds),
   })
 
   // Fetch document types (placeholder - in Phase 1, we'll show a simplified view)
@@ -204,11 +222,16 @@ export const StepDetail = ({ stepId, processId }: StepDetailProps): JSX.Element 
   } = useQuery({
     queryKey: ['document-types', processId],
     queryFn: async (): Promise<DocumentType[]> => {
-      // For Phase 1, we'll return empty array since there's no dedicated endpoint yet
-      // In Phase 2, this would fetch from /processes/{processId}/documents
-      return []
+      // For Phase 1, we'll try to fetch from /processes/{processId}/document-types
+      // If endpoint doesn't exist, this will fail gracefully and return empty array
+      try {
+        const response = await apiClient.get<DocumentType[]>(`/processes/${processId}/document-types`)
+        return response.data
+      } catch {
+        return []
+      }
     },
-    enabled: Boolean(processId),
+    enabled: Boolean(processId && validIds),
   })
 
   // Sanitize step data
@@ -220,6 +243,37 @@ export const StepDetail = ({ stepId, processId }: StepDetailProps): JSX.Element 
       description: sanitizeText(step.description),
     }
   }, [step])
+
+  // Invalid ID state
+  if (!validIds) {
+    return (
+      <div
+        style={{
+          padding: '2rem',
+          backgroundColor: '#fff5f5',
+          borderRadius: '8px',
+          border: '1px solid #fcc',
+          textAlign: 'center',
+        }}
+        role="alert"
+      >
+        <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>⚠️</div>
+        <h3
+          style={{
+            fontSize: '1.1rem',
+            fontWeight: 600,
+            color: '#c00',
+            marginBottom: '0.5rem',
+          }}
+        >
+          Invalid ID format
+        </h3>
+        <p style={{ color: '#666666', fontSize: '0.9rem' }}>
+          The provided step ID or process ID is not in a valid format.
+        </p>
+      </div>
+    )
+  }
 
   // Loading state
   if (isStepLoading || isRequirementsLoading || isDocumentsLoading) {
@@ -290,7 +344,7 @@ export const StepDetail = ({ stepId, processId }: StepDetailProps): JSX.Element 
             style={{
               display: 'inline-block',
               padding: '0.25rem 0.75rem',
-              backgroundColor: '#007bff',
+              backgroundColor: '#0056b3',
               color: '#ffffff',
               borderRadius: '12px',
               fontSize: '0.75rem',
@@ -406,7 +460,7 @@ export const StepDetail = ({ stepId, processId }: StepDetailProps): JSX.Element 
               margin: 0,
             }}
           >
-            {allRequirements.map((req) => {
+            {allRequirements.slice(0, MAX_REQUIREMENTS).map((req) => {
               const sanitizedReqText = sanitizeText(req.text)
               return (
                 <li
@@ -414,8 +468,8 @@ export const StepDetail = ({ stepId, processId }: StepDetailProps): JSX.Element 
                   style={{
                     padding: '0.75rem',
                     marginBottom: '0.5rem',
-                    backgroundColor: req.hard_gate ? '#fff3cd' : '#f8f9fa',
-                    border: `1px solid ${req.hard_gate ? '#ffc107' : '#ddd'}`,
+                    backgroundColor: req.hard_gate ? '#fef3c7' : '#f8f9fa',
+                    border: `1px solid ${req.hard_gate ? '#f59e0b' : '#ddd'}`,
                     borderRadius: '6px',
                     display: 'flex',
                     alignItems: 'flex-start',
@@ -427,7 +481,7 @@ export const StepDetail = ({ stepId, processId }: StepDetailProps): JSX.Element 
                       width: '1.5rem',
                       height: '1.5rem',
                       borderRadius: '50%',
-                      backgroundColor: req.hard_gate ? '#ffc107' : '#6c757d',
+                      backgroundColor: req.hard_gate ? '#f59e0b' : '#6c757d',
                       color: '#fff',
                       textAlign: 'center',
                       lineHeight: '1.5rem',
@@ -490,8 +544,9 @@ export const StepDetail = ({ stepId, processId }: StepDetailProps): JSX.Element 
               margin: 0,
             }}
           >
-            {documentTypes.map((docType) => {
+            {documentTypes.slice(0, MAX_DOCUMENTS).map((docType) => {
               const sanitizedDocName = sanitizeText(docType.name)
+              const sanitizedExamples = docType.examples.map(ex => sanitizeText(ex))
               return (
                 <li
                   key={docType.doc_type_id}
@@ -521,9 +576,9 @@ export const StepDetail = ({ stepId, processId }: StepDetailProps): JSX.Element 
                     {docType.address_match_required && (
                       <div>Address must match Boston address</div>
                     )}
-                    {docType.examples.length > 0 && (
+                    {sanitizedExamples.length > 0 && (
                       <div style={{ marginTop: '0.25rem' }}>
-                        Examples: {docType.examples.join(', ')}
+                        Examples: {sanitizedExamples.join(', ')}
                       </div>
                     )}
                   </div>

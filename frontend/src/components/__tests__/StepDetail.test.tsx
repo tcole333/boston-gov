@@ -409,7 +409,8 @@ describe('StepDetail Component', () => {
 
   // ==================== Security Tests ====================
 
-  it('sanitizes HTML in step descriptions', async () => {
+  describe('Security: XSS Protection', () => {
+    it('sanitizes HTML in step descriptions', async () => {
     const stepWithXSS = {
       ...mockStep,
       description: 'Test description with <script>alert("XSS")</script> malicious code',
@@ -430,12 +431,12 @@ describe('StepDetail Component', () => {
       expect(screen.getByRole('article')).toBeInTheDocument()
     })
 
-    // HTML should be stripped
-    expect(screen.getByText(/Test description with alert\("XSS"\) malicious code/)).toBeInTheDocument()
-    expect(screen.queryByText(/<script>/)).not.toBeInTheDocument()
-  })
+      // HTML should be stripped
+      expect(screen.getByText(/Test description with alert\("XSS"\) malicious code/)).toBeInTheDocument()
+      expect(screen.queryByText(/<script>/)).not.toBeInTheDocument()
+    })
 
-  it('prevents XSS in requirement text', async () => {
+    it('prevents XSS in requirement text', async () => {
     const requirementWithXSS = {
       ...mockRequirements[0],
       text: 'Requirement <img src=x onerror="alert(\'XSS\')">'
@@ -455,17 +456,405 @@ describe('StepDetail Component', () => {
       <StepDetail stepId="rpp_step_1_check_eligibility" processId="boston_resident_parking_permit" />
     )
 
-    await waitFor(() => {
-      // Use getAllByText since 'Requirements' appears as a heading and in requirement text
-      const requirementElements = screen.getAllByText(/Requirement/)
-      expect(requirementElements.length).toBeGreaterThan(0)
+      await waitFor(() => {
+        // Use getAllByText since 'Requirements' appears as a heading and in requirement text
+        const requirementElements = screen.getAllByText(/Requirement/)
+        expect(requirementElements.length).toBeGreaterThan(0)
+      })
+
+      // HTML should be stripped
+      expect(screen.queryByRole('img')).not.toBeInTheDocument()
     })
 
-    // HTML should be stripped
-    expect(screen.queryByRole('img')).not.toBeInTheDocument()
+    it('sanitizes HTML in document type names', async () => {
+      const docWithXSS = {
+        ...mockDocumentTypes[0],
+        name: 'Document <script>alert("XSS")</script> Name'
+      }
+
+      // Override the query to return documents
+      mockApiGet.mockImplementation((url: string) => {
+        if (url.includes('/steps/')) {
+          return Promise.resolve({ data: mockStep })
+        }
+        if (url.includes('/requirements')) {
+          return Promise.resolve({ data: [] })
+        }
+        if (url.includes('/document-types')) {
+          return Promise.resolve({ data: [docWithXSS] })
+        }
+        return Promise.resolve({ data: [] })
+      })
+
+      renderWithQueryClient(
+        <StepDetail stepId="rpp_step_1_check_eligibility" processId="boston_resident_parking_permit" />
+      )
+
+      await waitFor(() => {
+        expect(screen.getByRole('article')).toBeInTheDocument()
+      })
+
+      // Check that document section appears
+      const article = screen.getByRole('article')
+
+      // The sanitized document name should be present (HTML stripped)
+      expect(article.textContent).toContain('Document alert("XSS") Name')
+
+      // HTML tags should be stripped
+      expect(screen.queryByText(/<script>/)).not.toBeInTheDocument()
+    })
+
+    it('sanitizes HTML in document type examples', async () => {
+      const docWithXSSExamples = {
+        ...mockDocumentTypes[0],
+        examples: ['Valid Example', '<img src=x onerror="alert(\'XSS\')">']
+      }
+
+      mockApiGet.mockImplementation((url: string) => {
+        if (url.includes('/steps/')) {
+          return Promise.resolve({ data: mockStep })
+        }
+        if (url.includes('/requirements')) {
+          return Promise.resolve({ data: [] })
+        }
+        if (url.includes('/document-types')) {
+          return Promise.resolve({ data: [docWithXSSExamples] })
+        }
+        return Promise.resolve({ data: [] })
+      })
+
+      renderWithQueryClient(
+        <StepDetail stepId="rpp_step_1_check_eligibility" processId="boston_resident_parking_permit" />
+      )
+
+      await waitFor(() => {
+        expect(screen.getByRole('article')).toBeInTheDocument()
+      })
+
+      // Check that examples are rendered
+      const article = screen.getByRole('article')
+      expect(article.textContent).toContain('Valid Example')
+
+      // HTML should be stripped from examples
+      expect(screen.queryByRole('img')).not.toBeInTheDocument()
+    })
   })
 
-  it('validates stepId format', async () => {
+  describe('Security: DoS Protection', () => {
+    it('truncates very long step descriptions to 5000 characters', async () => {
+      const longDescription = 'x'.repeat(10000)
+      const longStep: Step = {
+        ...mockStep,
+        description: longDescription,
+      }
+      mockApiGet.mockImplementation((url: string) => {
+        if (url.includes('/steps/')) {
+          return Promise.resolve({ data: longStep })
+        }
+        return Promise.resolve({ data: [] })
+      })
+
+      renderWithQueryClient(<StepDetail stepId="step_1" processId="boston_rpp" />)
+
+      await waitFor(() => {
+        expect(screen.getByRole('article')).toBeInTheDocument()
+      })
+
+      // Find the description text
+      const article = screen.getByRole('article')
+      const paragraphs = article.querySelectorAll('p')
+      const descriptionParagraph = Array.from(paragraphs).find(p =>
+        p.textContent?.includes('x')
+      )
+
+      expect(descriptionParagraph?.textContent?.length).toBeLessThanOrEqual(5000)
+    })
+
+    it('truncates very long step names to 5000 characters', async () => {
+      const longName = 'y'.repeat(10000)
+      const longStep: Step = {
+        ...mockStep,
+        name: longName,
+      }
+      mockApiGet.mockImplementation((url: string) => {
+        if (url.includes('/steps/')) {
+          return Promise.resolve({ data: longStep })
+        }
+        return Promise.resolve({ data: [] })
+      })
+
+      renderWithQueryClient(<StepDetail stepId="step_1" processId="boston_rpp" />)
+
+      await waitFor(() => {
+        expect(screen.getByRole('article')).toBeInTheDocument()
+      })
+
+      // Find the heading with the step name
+      const heading = screen.getByRole('heading', { level: 2 })
+      const nameText = heading.textContent?.replace('[source]', '') || ''
+
+      expect(nameText.length).toBeLessThanOrEqual(5000)
+    })
+
+    it('truncates very long requirement text to 5000 characters', async () => {
+      const longRequirement = {
+        ...mockRequirements[0],
+        text: 'z'.repeat(10000)
+      }
+
+      mockApiGet.mockImplementation((url: string) => {
+        if (url.includes('/steps/')) {
+          return Promise.resolve({ data: mockStep })
+        }
+        if (url.includes('/requirements')) {
+          return Promise.resolve({ data: [longRequirement] })
+        }
+        return Promise.resolve({ data: [] })
+      })
+
+      renderWithQueryClient(<StepDetail stepId="step_1" processId="boston_rpp" />)
+
+      await waitFor(() => {
+        expect(screen.getByText('Requirements')).toBeInTheDocument()
+      })
+
+      // Find the requirement text span within list items
+      const article = screen.getByRole('article')
+      const listItems = article.querySelectorAll('li')
+      const requirementItem = Array.from(listItems).find(li =>
+        li.textContent?.includes('z')
+      )
+
+      // Find the span that contains the sanitized requirement text
+      const requirementSpan = requirementItem?.querySelector('span:not([aria-label])')
+      const requirementTextWithCitation = requirementSpan?.textContent || ''
+      // Remove the "[source]" citation text
+      const requirementText = requirementTextWithCitation.replace('[source]', '')
+
+      expect(requirementText.length).toBeLessThanOrEqual(5000)
+    })
+
+    it('limits requirements list to MAX_REQUIREMENTS (50)', async () => {
+      const manyRequirements = Array.from({ length: 100 }, (_, i) => ({
+        ...mockRequirements[0],
+        requirement_id: `req_${i}`,
+        text: `Requirement ${i}`
+      }))
+
+      mockApiGet.mockImplementation((url: string) => {
+        if (url.includes('/steps/')) {
+          return Promise.resolve({ data: mockStep })
+        }
+        if (url.includes('/requirements')) {
+          return Promise.resolve({ data: manyRequirements })
+        }
+        return Promise.resolve({ data: [] })
+      })
+
+      renderWithQueryClient(<StepDetail stepId="step_1" processId="boston_rpp" />)
+
+      await waitFor(() => {
+        expect(screen.getByText('Requirements')).toBeInTheDocument()
+      })
+
+      // Count rendered requirements
+      const requirementsList = screen.getByRole('list')
+      const items = requirementsList.querySelectorAll('li')
+
+      expect(items.length).toBeLessThanOrEqual(50)
+    })
+
+    it('limits documents list to MAX_DOCUMENTS (20)', async () => {
+      const manyDocuments = Array.from({ length: 50 }, (_, i) => ({
+        ...mockDocumentTypes[0],
+        doc_type_id: `doc_${i}`,
+        name: `Document ${i}`
+      }))
+
+      mockApiGet.mockImplementation((url: string) => {
+        if (url.includes('/steps/')) {
+          return Promise.resolve({ data: mockStep })
+        }
+        if (url.includes('/requirements')) {
+          return Promise.resolve({ data: [] })
+        }
+        if (url.includes('/document-types')) {
+          return Promise.resolve({ data: manyDocuments })
+        }
+        return Promise.resolve({ data: [] })
+      })
+
+      renderWithQueryClient(<StepDetail stepId="step_1" processId="boston_rpp" />)
+
+      await waitFor(() => {
+        expect(screen.getByRole('article')).toBeInTheDocument()
+      })
+
+      // Count rendered documents - should be limited to 20
+      const article = screen.getByRole('article')
+      const lists = article.querySelectorAll('ul')
+      // Get the documents list (should be the only list if no requirements)
+      const documentsList = lists[0]
+      const items = documentsList?.querySelectorAll('li') || []
+
+      expect(items.length).toBeLessThanOrEqual(20)
+    })
+  })
+
+  describe('Security: URL Validation', () => {
+    it('blocks data: protocol URLs in citations', async () => {
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+      const stepWithDataUrl: Step = {
+        ...mockStep,
+        source_url: 'data:text/html,<script>alert("XSS")</script>',
+      }
+      mockApiGet.mockImplementation((url: string) => {
+        if (url.includes('/steps/')) {
+          return Promise.resolve({ data: stepWithDataUrl })
+        }
+        return Promise.resolve({ data: [] })
+      })
+
+      renderWithQueryClient(<StepDetail stepId="step_1" processId="boston_rpp" />)
+
+      await waitFor(() => {
+        expect(screen.getByRole('article')).toBeInTheDocument()
+      })
+
+      const citationLinks = screen.getAllByText('[source]')
+      const firstLink = citationLinks[0]?.closest('a')
+
+      if (firstLink) {
+        await userEvent.click(firstLink)
+        expect(consoleSpy).toHaveBeenCalledWith('Blocked unsafe URL:', expect.stringContaining('data:'))
+        expect(firstLink).toHaveAttribute('href', '#')
+      }
+
+      consoleSpy.mockRestore()
+    })
+
+    it('blocks vbscript: protocol URLs in citations', async () => {
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+      const stepWithVbscriptUrl: Step = {
+        ...mockStep,
+        source_url: 'vbscript:msgbox("XSS")',
+      }
+      mockApiGet.mockImplementation((url: string) => {
+        if (url.includes('/steps/')) {
+          return Promise.resolve({ data: stepWithVbscriptUrl })
+        }
+        return Promise.resolve({ data: [] })
+      })
+
+      renderWithQueryClient(<StepDetail stepId="step_1" processId="boston_rpp" />)
+
+      await waitFor(() => {
+        expect(screen.getByRole('article')).toBeInTheDocument()
+      })
+
+      const citationLinks = screen.getAllByText('[source]')
+      const firstLink = citationLinks[0]?.closest('a')
+
+      if (firstLink) {
+        await userEvent.click(firstLink)
+        expect(consoleSpy).toHaveBeenCalledWith('Blocked unsafe URL:', expect.stringContaining('vbscript:'))
+        expect(firstLink).toHaveAttribute('href', '#')
+      }
+
+      consoleSpy.mockRestore()
+    })
+
+    it('blocks file: protocol URLs in citations', async () => {
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+      const stepWithFileUrl: Step = {
+        ...mockStep,
+        source_url: 'file:///etc/passwd',
+      }
+      mockApiGet.mockImplementation((url: string) => {
+        if (url.includes('/steps/')) {
+          return Promise.resolve({ data: stepWithFileUrl })
+        }
+        return Promise.resolve({ data: [] })
+      })
+
+      renderWithQueryClient(<StepDetail stepId="step_1" processId="boston_rpp" />)
+
+      await waitFor(() => {
+        expect(screen.getByRole('article')).toBeInTheDocument()
+      })
+
+      const citationLinks = screen.getAllByText('[source]')
+      const firstLink = citationLinks[0]?.closest('a')
+
+      if (firstLink) {
+        await userEvent.click(firstLink)
+        expect(consoleSpy).toHaveBeenCalledWith('Blocked unsafe URL:', expect.stringContaining('file:'))
+        expect(firstLink).toHaveAttribute('href', '#')
+      }
+
+      consoleSpy.mockRestore()
+    })
+
+    it('allows http: protocol URLs in citations', async () => {
+      const stepWithHttpUrl: Step = {
+        ...mockStep,
+        source_url: 'http://www.boston.gov/parking',
+      }
+      mockApiGet.mockImplementation((url: string) => {
+        if (url.includes('/steps/')) {
+          return Promise.resolve({ data: stepWithHttpUrl })
+        }
+        return Promise.resolve({ data: [] })
+      })
+
+      renderWithQueryClient(<StepDetail stepId="step_1" processId="boston_rpp" />)
+
+      await waitFor(() => {
+        expect(screen.getByRole('article')).toBeInTheDocument()
+      })
+
+      const citationLinks = screen.getAllByText('[source]')
+      const firstLink = citationLinks[0]?.closest('a')
+
+      expect(firstLink).toHaveAttribute('href', 'http://www.boston.gov/parking')
+    })
+
+    it('handles malformed URLs gracefully', async () => {
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+      const stepWithMalformedUrl: Step = {
+        ...mockStep,
+        source_url: 'not-a-valid-url',
+      }
+      mockApiGet.mockImplementation((url: string) => {
+        if (url.includes('/steps/')) {
+          return Promise.resolve({ data: stepWithMalformedUrl })
+        }
+        return Promise.resolve({ data: [] })
+      })
+
+      renderWithQueryClient(<StepDetail stepId="step_1" processId="boston_rpp" />)
+
+      await waitFor(() => {
+        expect(screen.getByRole('article')).toBeInTheDocument()
+      })
+
+      const citationLinks = screen.getAllByText('[source]')
+      const firstLink = citationLinks[0]?.closest('a')
+
+      if (firstLink) {
+        await userEvent.click(firstLink)
+        expect(firstLink).toHaveAttribute('href', '#')
+      }
+
+      consoleSpy.mockRestore()
+    })
+  })
+
+  it('renders with valid stepId', async () => {
     mockApiGet.mockImplementation((url: string) => {
       if (url.includes('/steps/')) {
         return Promise.resolve({ data: mockStep })
@@ -481,6 +870,30 @@ describe('StepDetail Component', () => {
     await waitFor(() => {
       expect(mockApiGet).toHaveBeenCalled()
     })
+  })
+
+  it('rejects invalid stepId format', async () => {
+    renderWithQueryClient(
+      <StepDetail stepId="invalid@id!" processId="boston_resident_parking_permit" />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toBeInTheDocument()
+    })
+
+    expect(screen.getByText('Invalid ID format')).toBeInTheDocument()
+  })
+
+  it('rejects invalid processId format', async () => {
+    renderWithQueryClient(
+      <StepDetail stepId="valid_step_id" processId="invalid@process!" />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toBeInTheDocument()
+    })
+
+    expect(screen.getByText('Invalid ID format')).toBeInTheDocument()
   })
 
   // ==================== Accessibility Tests ====================
