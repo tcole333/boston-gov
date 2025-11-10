@@ -9,6 +9,8 @@ WORKDIR /app
 # Install system dependencies and UV
 RUN apt-get update && apt-get install -y \
     curl \
+    tesseract-ocr \
+    poppler-utils \
     && curl -LsSf https://astral.sh/uv/install.sh | sh \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
