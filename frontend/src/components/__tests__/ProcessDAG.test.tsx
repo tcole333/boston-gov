@@ -30,6 +30,8 @@ interface MockEdge {
   id: string
   source: string
   target: string
+  sourceHandle?: string
+  targetHandle?: string
   type?: string
   animated?: boolean
   style?: Record<string, string | number>
@@ -100,6 +102,11 @@ vi.mock('reactflow', () => ({
         {edges.map((edge) => (
           <div key={edge.id} data-testid={`edge-${edge.id}`}>
             {edge.source} -&gt; {edge.target}
+            {edge.sourceHandle && edge.targetHandle && (
+              <span data-testid={`edge-handles-${edge.id}`}>
+                ({edge.sourceHandle} → {edge.targetHandle})
+              </span>
+            )}
           </div>
         ))}
       </div>
@@ -108,6 +115,13 @@ vi.mock('reactflow', () => ({
   Controls: () => <div data-testid="controls">Controls</div>,
   Background: () => <div data-testid="background">Background</div>,
   Panel: ({ children }: MockPanelProps) => <div data-testid="panel">{children}</div>,
+  Handle: ({ id, type }: { id: string; type: string }) => (
+    <div data-testid={`handle-${type}-${id}`}>Handle</div>
+  ),
+  Position: {
+    Top: 'top',
+    Bottom: 'bottom',
+  },
   BackgroundVariant: {
     Dots: 'dots',
   },
@@ -276,6 +290,39 @@ describe('ProcessDAG', () => {
 
       // Check edges are rendered
       expect(screen.getByTestId('edges')).toBeInTheDocument()
+    })
+
+    it('renders nodes with React Flow handles for edge connections (Issue #61)', async () => {
+      mockGet.mockResolvedValueOnce({ data: mockDagData })
+
+      renderProcessDAG()
+
+      await waitFor(() => {
+        expect(screen.getByTestId('react-flow')).toBeInTheDocument()
+      })
+
+      // Each node should have both target (top) and source (bottom) handles
+      // Check that Handle components are rendered for first node
+      const step1Node = screen.getByTestId('node-step_1')
+      expect(step1Node.querySelector('[data-testid="handle-target-top"]')).toBeInTheDocument()
+      expect(step1Node.querySelector('[data-testid="handle-source-bottom"]')).toBeInTheDocument()
+    })
+
+    it('edges specify sourceHandle and targetHandle for connections (Issue #61)', async () => {
+      mockGet.mockResolvedValueOnce({ data: mockDagData })
+
+      renderProcessDAG()
+
+      await waitFor(() => {
+        expect(screen.getByTestId('react-flow')).toBeInTheDocument()
+      })
+
+      // Check that edges have handle specifications
+      const edge0 = screen.getByTestId('edge-edge-0')
+      expect(edge0.textContent).toContain('(bottom → top)')
+
+      const edge1 = screen.getByTestId('edge-edge-1')
+      expect(edge1.textContent).toContain('(bottom → top)')
     })
 
     it('fetches data from correct API endpoint', async () => {
@@ -775,6 +822,61 @@ describe('ProcessDAG', () => {
       expect(consoleWarnSpy).toHaveBeenCalledWith(
         'Skipping node with invalid ID:',
         'step; DROP TABLE nodes;'
+      )
+
+      consoleWarnSpy.mockRestore()
+    })
+
+    it('allows node IDs with dots (Issue #62)', async () => {
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+      const dotIdDag: ProcessDag = {
+        nodes: [
+          {
+            id: 'rpp.check_eligibility',
+            label: 'Check Eligibility',
+            order: 1,
+            data: {},
+          },
+          {
+            id: 'rpp.gather_documents',
+            label: 'Gather Documents',
+            order: 2,
+            data: {},
+          },
+          {
+            id: 'rpp.submit_application',
+            label: 'Submit Application',
+            order: 3,
+            data: {},
+          },
+        ],
+        edges: [
+          {
+            source: 'rpp.gather_documents',
+            target: 'rpp.check_eligibility',
+            type: 'DEPENDS_ON',
+          },
+        ],
+      }
+
+      mockGet.mockResolvedValueOnce({ data: dotIdDag })
+
+      renderProcessDAG()
+
+      await waitFor(() => {
+        expect(screen.getByTestId('react-flow')).toBeInTheDocument()
+      })
+
+      // All nodes with dots should render
+      expect(screen.getByTestId('node-rpp.check_eligibility')).toBeInTheDocument()
+      expect(screen.getByTestId('node-rpp.gather_documents')).toBeInTheDocument()
+      expect(screen.getByTestId('node-rpp.submit_application')).toBeInTheDocument()
+
+      // Should NOT warn about dots in IDs
+      expect(consoleWarnSpy).not.toHaveBeenCalledWith(
+        'Skipping node with invalid ID:',
+        expect.stringContaining('.')
       )
 
       consoleWarnSpy.mockRestore()
