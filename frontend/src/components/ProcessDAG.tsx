@@ -9,6 +9,8 @@ import ReactFlow, {
   NodeTypes,
   ConnectionMode,
   Panel,
+  Handle,
+  Position,
 } from 'reactflow'
 import dagre from 'dagre'
 import { apiClient, getApiErrorMessage } from '../lib/api'
@@ -38,10 +40,10 @@ const sanitizeLabel = (label: string): string => {
 
 /**
  * Validates node IDs to prevent injection attacks.
- * Only allows alphanumeric characters, underscores, and hyphens.
+ * Only allows alphanumeric characters, underscores, hyphens, and dots.
  */
 const isValidNodeId = (id: string): boolean => {
-  return /^[a-zA-Z0-9_-]{1,100}$/.test(id)
+  return /^[a-zA-Z0-9_.-]{1,100}$/.test(id)
 }
 
 // Security limits to prevent DoS attacks
@@ -52,36 +54,41 @@ const MAX_EDGES = 500
  * Custom node component for process steps.
  * Displays step label with styling.
  * SECURITY: Sanitizes labels to prevent XSS attacks.
+ * Includes Handle components for React Flow edge connections.
  */
 const StepNode = ({ data }: { data: { label: string; order: number } }): JSX.Element => {
   const safeLabel = sanitizeLabel(data.label)
 
   return (
-    <div
-      style={{
-        padding: '12px 20px',
-        borderRadius: '8px',
-        border: '2px solid #007bff',
-        backgroundColor: '#ffffff',
-        minWidth: '150px',
-        textAlign: 'center',
-        cursor: 'pointer',
-        transition: 'all 0.2s',
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.backgroundColor = '#e7f3ff'
-        e.currentTarget.style.borderColor = '#0056b3'
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.backgroundColor = '#ffffff'
-        e.currentTarget.style.borderColor = '#007bff'
-      }}
-    >
-      <div style={{ fontSize: '0.75rem', color: '#666666', marginBottom: '4px' }}>
-        Step {data.order}
+    <>
+      <Handle type="target" position={Position.Top} id="top" />
+      <div
+        style={{
+          padding: '12px 20px',
+          borderRadius: '8px',
+          border: '2px solid #007bff',
+          backgroundColor: '#ffffff',
+          minWidth: '150px',
+          textAlign: 'center',
+          cursor: 'pointer',
+          transition: 'all 0.2s',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.backgroundColor = '#e7f3ff'
+          e.currentTarget.style.borderColor = '#0056b3'
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = '#ffffff'
+          e.currentTarget.style.borderColor = '#007bff'
+        }}
+      >
+        <div style={{ fontSize: '0.75rem', color: '#666666', marginBottom: '4px' }}>
+          Step {data.order}
+        </div>
+        <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#333' }}>{safeLabel}</div>
       </div>
-      <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#333' }}>{safeLabel}</div>
-    </div>
+      <Handle type="source" position={Position.Bottom} id="bottom" />
+    </>
   )
 }
 
@@ -225,6 +232,8 @@ export const ProcessDAG = ({ processId, onNodeClick }: ProcessDAGProps): JSX.Ele
         id: `edge-${index}`,
         source: edge.source,
         target: edge.target,
+        sourceHandle: 'bottom',
+        targetHandle: 'top',
         type: 'smoothstep',
         animated: true,
         style: { stroke: '#007bff', strokeWidth: 2 },
