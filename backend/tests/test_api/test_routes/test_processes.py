@@ -495,3 +495,196 @@ def test_get_process_requirements_service_error(
     assert response.status_code == 500
     data = response.json()
     assert "Error retrieving requirements" in data["detail"]
+
+
+# ==================== GET /api/processes/{process_id}/document-types ====================
+
+
+def test_get_document_types_boston_rpp(client: TestClient) -> None:
+    """Test document types endpoint for Boston RPP process."""
+    response = client.get("/api/processes/boston_resident_parking_permit/document-types")
+
+    assert response.status_code == 200
+    data = response.json()
+
+    # Should return 2 document types (proof_of_residency, vehicle_registration)
+    assert len(data) == 2
+
+    # Verify structure of first document type
+    doc = data[0]
+    assert "id" in doc
+    assert "label" in doc
+    assert "description" in doc
+    assert "accepted_formats" in doc
+    assert "max_size_mb" in doc
+    assert "required" in doc
+
+    # Verify citations present
+    assert "source_url" in doc
+    assert "source_section" in doc
+    assert "last_verified" in doc
+    assert "confidence" in doc
+
+    # Verify specific document types
+    doc_ids = {d["id"] for d in data}
+    assert "proof_of_residency" in doc_ids
+    assert "vehicle_registration" in doc_ids
+
+
+def test_get_document_types_boston_rpp_details(client: TestClient) -> None:
+    """Test detailed fields of Boston RPP document types."""
+    response = client.get("/api/processes/boston_resident_parking_permit/document-types")
+
+    assert response.status_code == 200
+    data = response.json()
+
+    # Verify proof_of_residency details
+    proof_of_residency = next(d for d in data if d["id"] == "proof_of_residency")
+    assert proof_of_residency["label"] == "Proof of Boston Residency"
+    assert "utility bill" in proof_of_residency["description"].lower()
+    assert "pdf" in proof_of_residency["accepted_formats"]
+    assert "jpg" in proof_of_residency["accepted_formats"]
+    assert "png" in proof_of_residency["accepted_formats"]
+    assert proof_of_residency["max_size_mb"] == 10
+    assert proof_of_residency["required"] is True
+
+    # Verify vehicle_registration details
+    vehicle_reg = next(d for d in data if d["id"] == "vehicle_registration")
+    assert vehicle_reg["label"] == "Vehicle Registration"
+    assert "massachusetts" in vehicle_reg["description"].lower()
+    assert vehicle_reg["required"] is True
+
+
+def test_get_document_types_citations_valid(client: TestClient) -> None:
+    """Test that all document types have valid citations."""
+    response = client.get("/api/processes/boston_resident_parking_permit/document-types")
+
+    assert response.status_code == 200
+    data = response.json()
+
+    for doc in data:
+        # Verify citations
+        assert doc["source_url"].startswith("https://")
+        assert "boston.gov" in doc["source_url"]
+        assert len(doc["source_section"]) > 0
+        # Verify YYYY-MM-DD format
+        assert len(doc["last_verified"]) == 10
+        assert doc["last_verified"].count("-") == 2
+        # Verify confidence level
+        assert doc["confidence"] in ["high", "medium", "low"]
+
+
+def test_get_document_types_unknown_process(client: TestClient) -> None:
+    """Test document types for unknown process returns empty list."""
+    response = client.get("/api/processes/unknown_process/document-types")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data == []
+
+
+def test_get_document_types_accepted_formats(client: TestClient) -> None:
+    """Test that all document types accept common file formats."""
+    response = client.get("/api/processes/boston_resident_parking_permit/document-types")
+
+    assert response.status_code == 200
+    data = response.json()
+
+    for doc in data:
+        # All documents should accept at least pdf, jpg, png
+        formats = doc["accepted_formats"]
+        assert "pdf" in formats
+        assert "jpg" in formats or "jpeg" in formats
+        assert "png" in formats
+        # Max size should be reasonable
+        assert 1 <= doc["max_size_mb"] <= 100
+
+
+def test_get_document_types_all_required(client: TestClient) -> None:
+    """Test that all Boston RPP document types are marked as required."""
+    response = client.get("/api/processes/boston_resident_parking_permit/document-types")
+
+    assert response.status_code == 200
+    data = response.json()
+
+    for doc in data:
+        assert doc["required"] is True, f"Document {doc['id']} should be required"
+
+
+def test_get_document_types_source_consistency(client: TestClient) -> None:
+    """Test that all document types cite the same verified date."""
+    response = client.get("/api/processes/boston_resident_parking_permit/document-types")
+
+    assert response.status_code == 200
+    data = response.json()
+
+    # All should have the same last_verified date (from same source)
+    verified_dates = {d["last_verified"] for d in data}
+    assert len(verified_dates) == 1, "All documents should have same verification date"
+
+    # All should have high confidence (official source)
+    confidences = {d["confidence"] for d in data}
+    assert confidences == {"high"}, "All documents should have high confidence"
+
+
+@pytest.mark.parametrize(
+    "doc_id,expected_section",
+    [
+        ("proof_of_residency", "Proof of Boston residency"),
+        ("vehicle_registration", "Proof of vehicle ownership"),
+    ],
+)
+def test_get_document_types_correct_source_sections(
+    client: TestClient,
+    doc_id: str,
+    expected_section: str,
+) -> None:
+    """Test that each document type has the correct source section citation.
+
+    This prevents "reward hacking" where source_sections could be swapped
+    between document types without tests catching it.
+    """
+    response = client.get("/api/processes/boston_resident_parking_permit/document-types")
+    assert response.status_code == 200
+
+    data = response.json()
+    doc = next((d for d in data if d["id"] == doc_id), None)
+
+    assert doc is not None, f"Document type {doc_id} not found"
+    assert doc["source_section"] == expected_section, (
+        f"Document {doc_id} has incorrect source_section. "
+        f"Expected: {expected_section}, Got: {doc['source_section']}"
+    )
+
+
+@pytest.mark.parametrize(
+    "malicious_id",
+    [
+        "'; DROP TABLE processes; --",  # SQL injection
+        "<script>alert('xss')</script>",  # XSS
+        "../../etc/passwd",  # Path traversal
+        "%27%3B%20DROP%20TABLE%20processes%3B%20--",  # URL-encoded SQL injection
+        "../../../secret",  # Directory traversal
+    ],
+)
+def test_get_document_types_malicious_process_id(
+    client: TestClient,
+    malicious_id: str,
+) -> None:
+    """Test that malicious process IDs are handled safely.
+
+    Verifies that injection attempts and path traversal attacks
+    are safely handled without crashing or exposing data.
+    """
+    response = client.get(f"/api/processes/{malicious_id}/document-types")
+
+    # Should either:
+    # - Return 200 with empty list (endpoint handled it safely)
+    # - Return 404 (FastAPI routing rejected invalid path)
+    # Both are acceptable security behaviors - no crash or data exposure
+    assert response.status_code in [200, 404], (
+        f"Unexpected status code {response.status_code} for malicious ID"
+    )
+
+    if response.status_code == 200:
+        assert response.json() == [], "Should return empty list for unknown process"
