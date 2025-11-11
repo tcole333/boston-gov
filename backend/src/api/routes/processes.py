@@ -15,8 +15,10 @@ Pydantic models defined in src.schemas.graph.
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import HttpUrl
 
 from src.db.graph.client import get_neo4j_client
+from src.schemas.api import DocumentTypeResponse
 from src.schemas.graph import Process, Requirement, Step
 from src.services.graph_service import (
     ConnectionError,
@@ -286,3 +288,85 @@ async def get_process_requirements(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving requirements: {str(e)}",
         ) from e
+
+
+@router.get("/{process_id}/document-types", response_model=list[DocumentTypeResponse])
+async def get_process_document_types(
+    process_id: str,
+) -> list[DocumentTypeResponse]:
+    """
+    Get document types required for a process.
+
+    Returns metadata about each document type including accepted formats,
+    size limits, and citations to official sources.
+
+    Args:
+        process_id: Unique process identifier (e.g., "boston_resident_parking_permit")
+
+    Returns:
+        List of DocumentTypeResponse models with citation metadata
+
+    Raises:
+        HTTPException: None - returns empty list for unknown processes
+
+    Note:
+        For MVP: Returns hardcoded Boston RPP document types sourced from
+        docs/facts/boston_rpp.yaml. Future versions will query Neo4j for
+        dynamic requirements per process.
+
+        All document types include regulatory citations:
+        - source_url: Official Boston.gov page
+        - source_section: Specific section on page
+        - last_verified: Date requirement was verified (YYYY-MM-DD)
+        - confidence: "high" | "medium" | "low"
+    """
+    # MVP: Hardcoded for Boston RPP
+    # Source: docs/facts/boston_rpp.yaml
+    # See facts: rpp.proof_of_residency.accepted_types (lines 54-59)
+    if process_id == "boston_resident_parking_permit":
+        # Base URL for all Boston RPP document citations
+        base_url = HttpUrl(
+            "https://www.boston.gov/departments/parking-clerk/how-get-resident-parking-permit"
+        )
+
+        return [
+            DocumentTypeResponse(
+                id="proof_of_residency",
+                label="Proof of Boston Residency",
+                description="Document proving you live in Boston. Accepted: utility bill (gas/electric/telephone), cable bill, bank statement, mortgage statement, credit card statement, water/sewer bill, or lease agreement. Must be dated within 30 days and name must match registration.",
+                accepted_formats=["pdf", "jpg", "jpeg", "png"],
+                max_size_mb=10,
+                required=True,
+                source_url=base_url,
+                source_section="Proof of Boston residency",
+                last_verified="2025-11-09",
+                confidence="high",
+            ),
+            DocumentTypeResponse(
+                id="vehicle_registration",
+                label="Vehicle Registration",
+                description="Current Massachusetts vehicle registration in your name at the Boston address, with principal garaging and insurance at that address. No unpaid Boston parking tickets allowed on the registration.",
+                accepted_formats=["pdf", "jpg", "jpeg", "png"],
+                max_size_mb=10,
+                required=True,
+                source_url=base_url,
+                source_section="Proof of vehicle ownership",
+                last_verified="2025-11-09",
+                confidence="high",
+            ),
+            DocumentTypeResponse(
+                id="drivers_license",
+                label="Driver's License",
+                description="Valid Massachusetts driver's license or state-issued ID. Must match the name on vehicle registration and proof of residency.",
+                accepted_formats=["pdf", "jpg", "jpeg", "png"],
+                max_size_mb=10,
+                required=True,
+                source_url=base_url,
+                source_section="Valid Massachusetts driver's license",
+                last_verified="2025-11-09",
+                confidence="high",
+            ),
+        ]
+
+    # For other processes, return empty list (to be implemented)
+    return []
