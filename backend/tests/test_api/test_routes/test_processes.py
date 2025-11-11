@@ -495,3 +495,140 @@ def test_get_process_requirements_service_error(
     assert response.status_code == 500
     data = response.json()
     assert "Error retrieving requirements" in data["detail"]
+
+
+# ==================== GET /api/processes/{process_id}/document-types ====================
+
+
+def test_get_document_types_boston_rpp(client: TestClient) -> None:
+    """Test document types endpoint for Boston RPP process."""
+    response = client.get("/api/processes/boston_resident_parking_permit/document-types")
+
+    assert response.status_code == 200
+    data = response.json()
+
+    # Should return 3 document types
+    assert len(data) == 3
+
+    # Verify structure of first document type
+    doc = data[0]
+    assert "id" in doc
+    assert "label" in doc
+    assert "description" in doc
+    assert "accepted_formats" in doc
+    assert "max_size_mb" in doc
+    assert "required" in doc
+
+    # Verify citations present
+    assert "source_url" in doc
+    assert "source_section" in doc
+    assert "last_verified" in doc
+    assert "confidence" in doc
+
+    # Verify specific document types
+    doc_ids = {d["id"] for d in data}
+    assert "proof_of_residency" in doc_ids
+    assert "vehicle_registration" in doc_ids
+    assert "drivers_license" in doc_ids
+
+
+def test_get_document_types_boston_rpp_details(client: TestClient) -> None:
+    """Test detailed fields of Boston RPP document types."""
+    response = client.get("/api/processes/boston_resident_parking_permit/document-types")
+
+    assert response.status_code == 200
+    data = response.json()
+
+    # Verify proof_of_residency details
+    proof_of_residency = next(d for d in data if d["id"] == "proof_of_residency")
+    assert proof_of_residency["label"] == "Proof of Boston Residency"
+    assert "utility bill" in proof_of_residency["description"].lower()
+    assert "pdf" in proof_of_residency["accepted_formats"]
+    assert "jpg" in proof_of_residency["accepted_formats"]
+    assert "png" in proof_of_residency["accepted_formats"]
+    assert proof_of_residency["max_size_mb"] == 10
+    assert proof_of_residency["required"] is True
+
+    # Verify vehicle_registration details
+    vehicle_reg = next(d for d in data if d["id"] == "vehicle_registration")
+    assert vehicle_reg["label"] == "Vehicle Registration"
+    assert "massachusetts" in vehicle_reg["description"].lower()
+    assert vehicle_reg["required"] is True
+
+    # Verify drivers_license details
+    drivers_license = next(d for d in data if d["id"] == "drivers_license")
+    assert drivers_license["label"] == "Driver's License"
+    assert "massachusetts" in drivers_license["description"].lower()
+    assert drivers_license["required"] is True
+
+
+def test_get_document_types_citations_valid(client: TestClient) -> None:
+    """Test that all document types have valid citations."""
+    response = client.get("/api/processes/boston_resident_parking_permit/document-types")
+
+    assert response.status_code == 200
+    data = response.json()
+
+    for doc in data:
+        # Verify citations
+        assert doc["source_url"].startswith("https://")
+        assert "boston.gov" in doc["source_url"]
+        assert len(doc["source_section"]) > 0
+        # Verify YYYY-MM-DD format
+        assert len(doc["last_verified"]) == 10
+        assert doc["last_verified"].count("-") == 2
+        # Verify confidence level
+        assert doc["confidence"] in ["high", "medium", "low"]
+
+
+def test_get_document_types_unknown_process(client: TestClient) -> None:
+    """Test document types for unknown process returns empty list."""
+    response = client.get("/api/processes/unknown_process/document-types")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data == []
+
+
+def test_get_document_types_accepted_formats(client: TestClient) -> None:
+    """Test that all document types accept common file formats."""
+    response = client.get("/api/processes/boston_resident_parking_permit/document-types")
+
+    assert response.status_code == 200
+    data = response.json()
+
+    for doc in data:
+        # All documents should accept at least pdf, jpg, png
+        formats = doc["accepted_formats"]
+        assert "pdf" in formats
+        assert "jpg" in formats or "jpeg" in formats
+        assert "png" in formats
+        # Max size should be reasonable
+        assert 1 <= doc["max_size_mb"] <= 100
+
+
+def test_get_document_types_all_required(client: TestClient) -> None:
+    """Test that all Boston RPP document types are marked as required."""
+    response = client.get("/api/processes/boston_resident_parking_permit/document-types")
+
+    assert response.status_code == 200
+    data = response.json()
+
+    for doc in data:
+        assert doc["required"] is True, f"Document {doc['id']} should be required"
+
+
+def test_get_document_types_source_consistency(client: TestClient) -> None:
+    """Test that all document types cite the same verified date."""
+    response = client.get("/api/processes/boston_resident_parking_permit/document-types")
+
+    assert response.status_code == 200
+    data = response.json()
+
+    # All should have the same last_verified date (from same source)
+    verified_dates = {d["last_verified"] for d in data}
+    assert len(verified_dates) == 1, "All documents should have same verification date"
+
+    # All should have high confidence (official source)
+    confidences = {d["confidence"] for d in data}
+    assert confidences == {"high"}, "All documents should have high confidence"
