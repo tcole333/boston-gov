@@ -1,5 +1,6 @@
 """Pydantic models for request/response validation."""
 
+from src.schemas.api import DocumentTypeResponse
 from src.schemas.facts import (
     Fact,
     FactsRegistry,
@@ -33,6 +34,7 @@ __all__ = [
     "ConfidenceLevel",
     "Document",
     "DocumentType",
+    "DocumentTypeResponse",
     "Fact",
     "FactsRegistry",
     "Office",
