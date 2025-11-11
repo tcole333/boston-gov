@@ -354,18 +354,6 @@ async def get_process_document_types(
                 last_verified="2025-11-09",
                 confidence="high",
             ),
-            DocumentTypeResponse(
-                id="drivers_license",
-                label="Driver's License",
-                description="Valid Massachusetts driver's license or state-issued ID. Must match the name on vehicle registration and proof of residency.",
-                accepted_formats=["pdf", "jpg", "jpeg", "png"],
-                max_size_mb=10,
-                required=True,
-                source_url=base_url,
-                source_section="Valid Massachusetts driver's license",
-                last_verified="2025-11-09",
-                confidence="high",
-            ),
         ]
 
     # For other processes, return empty list (to be implemented)

@@ -507,8 +507,8 @@ def test_get_document_types_boston_rpp(client: TestClient) -> None:
     assert response.status_code == 200
     data = response.json()
 
-    # Should return 3 document types
-    assert len(data) == 3
+    # Should return 2 document types (proof_of_residency, vehicle_registration)
+    assert len(data) == 2
 
     # Verify structure of first document type
     doc = data[0]
@@ -529,7 +529,6 @@ def test_get_document_types_boston_rpp(client: TestClient) -> None:
     doc_ids = {d["id"] for d in data}
     assert "proof_of_residency" in doc_ids
     assert "vehicle_registration" in doc_ids
-    assert "drivers_license" in doc_ids
 
 
 def test_get_document_types_boston_rpp_details(client: TestClient) -> None:
@@ -554,12 +553,6 @@ def test_get_document_types_boston_rpp_details(client: TestClient) -> None:
     assert vehicle_reg["label"] == "Vehicle Registration"
     assert "massachusetts" in vehicle_reg["description"].lower()
     assert vehicle_reg["required"] is True
-
-    # Verify drivers_license details
-    drivers_license = next(d for d in data if d["id"] == "drivers_license")
-    assert drivers_license["label"] == "Driver's License"
-    assert "massachusetts" in drivers_license["description"].lower()
-    assert drivers_license["required"] is True
 
 
 def test_get_document_types_citations_valid(client: TestClient) -> None:
@@ -632,3 +625,66 @@ def test_get_document_types_source_consistency(client: TestClient) -> None:
     # All should have high confidence (official source)
     confidences = {d["confidence"] for d in data}
     assert confidences == {"high"}, "All documents should have high confidence"
+
+
+@pytest.mark.parametrize(
+    "doc_id,expected_section",
+    [
+        ("proof_of_residency", "Proof of Boston residency"),
+        ("vehicle_registration", "Proof of vehicle ownership"),
+    ],
+)
+def test_get_document_types_correct_source_sections(
+    client: TestClient,
+    doc_id: str,
+    expected_section: str,
+) -> None:
+    """Test that each document type has the correct source section citation.
+
+    This prevents "reward hacking" where source_sections could be swapped
+    between document types without tests catching it.
+    """
+    response = client.get("/api/processes/boston_resident_parking_permit/document-types")
+    assert response.status_code == 200
+
+    data = response.json()
+    doc = next((d for d in data if d["id"] == doc_id), None)
+
+    assert doc is not None, f"Document type {doc_id} not found"
+    assert doc["source_section"] == expected_section, (
+        f"Document {doc_id} has incorrect source_section. "
+        f"Expected: {expected_section}, Got: {doc['source_section']}"
+    )
+
+
+@pytest.mark.parametrize(
+    "malicious_id",
+    [
+        "'; DROP TABLE processes; --",  # SQL injection
+        "<script>alert('xss')</script>",  # XSS
+        "../../etc/passwd",  # Path traversal
+        "%27%3B%20DROP%20TABLE%20processes%3B%20--",  # URL-encoded SQL injection
+        "../../../secret",  # Directory traversal
+    ],
+)
+def test_get_document_types_malicious_process_id(
+    client: TestClient,
+    malicious_id: str,
+) -> None:
+    """Test that malicious process IDs are handled safely.
+
+    Verifies that injection attempts and path traversal attacks
+    are safely handled without crashing or exposing data.
+    """
+    response = client.get(f"/api/processes/{malicious_id}/document-types")
+
+    # Should either:
+    # - Return 200 with empty list (endpoint handled it safely)
+    # - Return 404 (FastAPI routing rejected invalid path)
+    # Both are acceptable security behaviors - no crash or data exposure
+    assert response.status_code in [200, 404], (
+        f"Unexpected status code {response.status_code} for malicious ID"
+    )
+
+    if response.status_code == 200:
+        assert response.json() == [], "Should return empty list for unknown process"
