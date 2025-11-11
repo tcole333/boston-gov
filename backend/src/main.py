@@ -44,18 +44,37 @@ app = FastAPI(
 )
 
 # CORS middleware configuration
-# Load allowed origins from environment variable (comma-separated list)
-# Defaults to common development servers if not set
-cors_origins_str = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000")
-cors_origins: list[str] = [origin.strip() for origin in cors_origins_str.split(",")]
+# Environment-aware CORS setup for development flexibility and production security
+environment = os.getenv("ENVIRONMENT", "production").lower()
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=cors_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+if environment == "development":
+    # Development: Allow any localhost port for flexibility with Vite/React dev servers
+    # This enables frontend to run on any available port (5173, 5174, 3000, etc.)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=r"http://localhost:\d+",
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    # Production: Strict origin list from environment variable for security
+    # CORS_ORIGINS must be explicitly set in production (comma-separated list)
+    cors_origins_str = os.getenv("CORS_ORIGINS", "")
+    if not cors_origins_str:
+        raise ValueError(
+            "CORS_ORIGINS environment variable must be set in production. "
+            "Example: CORS_ORIGINS=https://example.com,https://www.example.com"
+        )
+    cors_origins: list[str] = [origin.strip() for origin in cors_origins_str.split(",")]
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 # Register API routes
 app.include_router(chat.router)
