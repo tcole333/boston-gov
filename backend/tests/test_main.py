@@ -88,7 +88,13 @@ class TestCORSConfiguration:
                 origin not in response.headers.get("access-control-allow-origin", "")
             )
 
-    @patch.dict(os.environ, {"ENVIRONMENT": "production", "CORS_ORIGINS": "https://example.com,https://app.example.com"})
+    @patch.dict(
+        os.environ,
+        {
+            "ENVIRONMENT": "production",
+            "CORS_ORIGINS": "https://example.com,https://app.example.com",
+        },
+    )
     def test_production_cors_requires_explicit_origins(self) -> None:
         """Test that production mode enforces strict origin list."""
         # Need to reimport to pick up new environment
@@ -129,7 +135,9 @@ class TestCORSConfiguration:
         import src.main
 
         # Reloading should raise ValueError during app initialization
-        with pytest.raises(ValueError, match="CORS_ORIGINS environment variable must be set in production"):
+        with pytest.raises(
+            ValueError, match="CORS_ORIGINS environment variable must be set in production"
+        ):
             importlib.reload(src.main)
 
     @patch.dict(os.environ, {"ENVIRONMENT": "production", "CORS_ORIGINS": "https://example.com"})
